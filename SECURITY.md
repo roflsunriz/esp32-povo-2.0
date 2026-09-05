@@ -12,17 +12,9 @@ NVSは単一のスキーマ付きレコードとして保存し、保存に失�
 
 ## ビルドツールの監査
 
-`requirements-ci.txt` に監査した依存グラフを固定し、`python scripts/audit-build-tools.py` でPyPIの既知脆弱性を照会します。未評価の検出や照会失敗はCIを失敗させます。全検出は `build/build-tools-audit.json` に残します。
+`requirements-ci.txt` にCLIビルドと監査で実際にインストールするパッケージを固定し、`python scripts/audit-build-tools.py` でPyPIの既知脆弱性を照会します。未評価の検出や照会失敗はCIを失敗させ、全結果を `build/build-tools-audit.json` に残します。
 
-2026-09-05時点のPlatformIO 6.1.19はStarletteを `<0.53` に制限しており、修正版1.xと互換性を保証できません。以下5件（DB上の重複を含め7検出）はStarlette 0.52.1に限り、CLIビルドの評価済み対象外として記録します。
-
-- [Hostヘッダー検証](https://github.com/Kludex/starlette/security/advisories/GHSA-86qp-5c8j-p5mr)
-- [リクエストパス検証](https://github.com/Kludex/starlette/security/advisories/GHSA-jp82-jpqv-5vv3)
-- [フォーム処理のDoS](https://github.com/Kludex/starlette/security/advisories/GHSA-82w8-qh3p-5jfq)
-- [Windows静的ファイル処理](https://github.com/Kludex/starlette/security/advisories/GHSA-wqp7-x3pw-xc5r)
-- [HTTPメソッド振り分け](https://github.com/Kludex/starlette/security/advisories/GHSA-x746-7m8f-x49c)
-
-これらはHTTPサーバーが外部入力を処理する際の問題です。本プロジェクトは `pio run` のCLIビルドのみを使用し、`platformio/home/run.py` のStarlette/Uvicornサーバーを起動しません。Starletteはファームウェアに含まれません。**このビルド環境で `pio home` を起動しないでください。** Homeを利用する場合、またはPlatformIOの対応範囲が変わった場合は例外を再評価し、互換性のある修正版へ更新してください。脆弱性が存在しないという判定ではありません。
+PlatformIO 6.1.19の通常インストールは、CLIビルドで使わないPlatformIO Home用のStarlette、Uvicorn、wsproto、ajsonrpcも導入します。Starlette 0.52.1の公開脆弱性をビルド環境から除くため、CIは全パッケージを明示固定し、`pip install --no-deps -r requirements-ci.txt` でHomeサーバー依存をインストールしません。この構成で隔離環境の `pio run -e cyd` と監査の動作を確認しています。**この環境で `pio home` は利用できません。** Homeが必要なら、PlatformIOが修正版Starletteに対応した版へ更新し、依存一式を再監査してください。
 
 ## ファームウェア依存の確認（2026-09-05）
 

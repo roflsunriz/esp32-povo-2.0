@@ -2,7 +2,7 @@
 
 ## ビルド
 
-PlatformIO CoreとPythonを用意します。検証と同じツールを使う場合は、Python 3.12以降で `python -m pip install -r requirements-ci.txt` を実行します。
+PlatformIO CoreとPythonを用意します。検証と同じCLI専用ツールを使う場合は、Python 3.12以降で `python -m pip install --no-deps -r requirements-ci.txt` を実行します。`--no-deps` を外すと未使用のPlatformIO Homeサーバー依存も導入されるため、省略しないでください。
 
 ```powershell
 Copy-Item include/device-config.example.h include/device-config.h
