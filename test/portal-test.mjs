@@ -11,7 +11,7 @@ const source=await readFile('include/setup-page.h','utf8');
 const html=source.match(/R"HTML\(([\s\S]*)\)HTML"/)[1].replace('{{TOKEN}}','test-token').replace('{{INITIAL_MESSAGE}}','');
 const page=resolve(root,'portal-test.html');await writeFile(page,html);
 const executable=process.env.CHROME_PATH||(process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':'google-chrome');
-const chrome=spawn(executable,['--headless=new','--no-first-run','--no-default-browser-check','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{stdio:'ignore',windowsHide:true});
+const chrome=spawn(executable,['--headless=new','--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{stdio:'ignore',windowsHide:true});
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 let socket;
 try {
