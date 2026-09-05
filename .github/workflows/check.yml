@@ -1,0 +1,16 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install platformio
+      - run: pio run -e cyd
+      - run: cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure
+      - run: python scripts/generate-font.py && git diff --exit-code -- include/japanese-font.h

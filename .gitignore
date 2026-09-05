@@ -1,1 +1,10 @@
 COMMON-AGENTS.md
+subagents/
+.pio/
+include/device-config.h
+__pycache__/
+.pio-core/
+build/
+dist/
+*.sqlite3*
+build-msvc/

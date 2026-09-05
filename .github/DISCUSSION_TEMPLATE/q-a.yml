@@ -1,0 +1,9 @@
+title: ""
+body:
+  - type: textarea
+    id: details
+    attributes:
+      label: 質問
+      description: 秘密情報を含めず、背景と相談内容を記載してください。
+    validations:
+      required: true
