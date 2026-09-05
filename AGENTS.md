@@ -15,8 +15,10 @@ Get-Content -Raw -LiteralPath .\COMMON-AGENTS.md
 
 ## 目的
 - ReVanced patchされたpovo2.0アプリから公開されたAPIをPCで中継してESP32-2432S028R ILI9341 ESP-WROOM-32 TFT LCDで受け取って表示する
+- API の詳細は roflsunriz/povo-2.0-revanced のコード、または同名プロジェクトのCodex履歴、または "C:\Users\UserName\Documents\povo-2.0-revanced" を見る
+- 関連プロジェクト: roflsunriz/esp32-codex-notifications のコード、または同名プロジェクトのCodex履歴、または "C:\Users\UserName\Documents\esp32-codex-notifications"
 - 原型は ./original-idea.md にある
 
 ## 制約
-- PCに接続済みのESP32はCodex Microとして使用中なので検証に使うのは禁止する
+- PCに接続済みのESP32はCodex Micro (esp32-codex-notifications) として使用中なので検証に使うのは禁止する
 - アリエクスプレスで追加のESP32を購入済みで数日すると着く予定なのでそれを使う
