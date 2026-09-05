@@ -20,8 +20,9 @@ void line(int y, const char* value, uint16_t color = fg) {
   while (*p && x < 312) {
     uint16_t c = *p++;
     if (c < 128) {
-      if (x + 6 > 312) break;
-      tft.drawChar(c, x, y, 1); x += 6; continue;
+      if (c < 32 || c > 126 || x + 8 > 312) break;
+      tft.drawBitmap(x, y, povo::kAsciiGlyphs[c - 32], 8, 16, color);
+      x += 8; continue;
     }
     if ((c & 0xE0) == 0xC0 && *p) { c = ((c & 31) << 6) | (*p++ & 63); }
     else if ((c & 0xF0) == 0xE0 && p[0] && p[1]) {

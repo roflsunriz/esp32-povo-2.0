@@ -1,4 +1,4 @@
-"""Generate the exact 16px Japanese glyph subset used by firmware labels."""
+"""Generate Japanese and printable ASCII glyphs with a shared 16px height."""
 import gzip
 import hashlib
 from pathlib import Path
@@ -12,15 +12,15 @@ def main():
     if hashlib.sha256(SOURCE.read_bytes()).hexdigest() != EXPECTED:
         raise ValueError("Unifont source checksum mismatch")
     text = (ROOT / "include/ui-text.h").read_text(encoding="utf-8")
-    needed = {ord(c) for c in text if ord(c) > 127}
+    needed = {ord(c) for c in text if ord(c) > 127} | set(range(32, 127))
     glyphs = {}
     for line in gzip.decompress(SOURCE.read_bytes()).decode("ascii").splitlines():
         code, bitmap = line.split(":")
         point = int(code, 16)
         if point in needed:
             data = bytes.fromhex(bitmap)
-            if len(data) != 32:
-                raise ValueError(f"Expected 16x16 glyph: {point:04X}")
+            if len(data) != (16 if point < 128 else 32):
+                raise ValueError(f"Unexpected glyph dimensions: {point:04X}")
             glyphs[point] = data
     if needed - glyphs.keys():
         raise ValueError(f"Missing glyphs: {needed - glyphs.keys()}")
@@ -30,10 +30,15 @@ def main():
              "struct Glyph { uint16_t codepoint; uint8_t bitmap[32]; };",
              "constexpr Glyph kJapaneseGlyphs[] = {"]
     for point, data in sorted(glyphs.items()):
+        if point < 128:
+            continue
         lines.append("  {0x%04X, {%s}}," % (point, ",".join(f"0x{v:02X}" for v in data)))
+    lines += ["};", "constexpr uint8_t kAsciiGlyphs[95][16] = {"]
+    for point in range(32, 127):
+        lines.append("  {%s}," % ",".join(f"0x{v:02X}" for v in glyphs[point]))
     lines += ["};", "}  // namespace povo", ""]
     (ROOT / "include/japanese-font.h").write_text("\n".join(lines), encoding="utf-8")
-    print(f"Generated {len(glyphs)} Japanese glyphs")
+    print(f"Generated {len(glyphs) - 95} Japanese and 95 ASCII glyphs (16px high)")
 
 
 if __name__ == "__main__":

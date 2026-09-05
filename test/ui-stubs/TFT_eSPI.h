@@ -3,7 +3,6 @@
 #include <stdexcept>
 #include <fstream>
 #include <cstdint>
-#include <Fonts/glcdfont.c>
 namespace ui {
 inline std::array<uint16_t, 320 * 240> pixels{};
 inline unsigned glyphCount = 0;
@@ -24,18 +23,16 @@ inline void ppm(const char* path) {
 }
 }
 class TFT_eSPI {
-  uint16_t foreground = 0xffff;
  public:
   void init() {}
   void setRotation(int rotation) { if (rotation != 1) throw std::runtime_error("wrong rotation"); }
-  void setTextColor(uint16_t color, uint16_t) { foreground = color; }
+  void setTextColor(uint16_t, uint16_t) {}
   void fillScreen(uint16_t color) { ui::pixels.fill(color); ui::glyphCount = ui::missing = 0; }
-  void drawChar(uint16_t c, int x, int y, int) {
-    ++ui::glyphCount;
-    for (int col = 0; col < 5; ++col) for (int row = 0; row < 8; ++row)
-      if ((font[c * 5 + col] >> row) & 1) ui::pixel(x + col, y + row, foreground);
+  void drawChar(uint16_t, int, int, int) {
+    throw std::runtime_error("legacy font must not be mixed with 16px glyphs");
   }
   void drawBitmap(int x, int y, const uint8_t* data, int width, int height, uint16_t color) {
+    if (height != 16) throw std::runtime_error("inconsistent glyph height");
     ++ui::glyphCount;
     for (int row = 0; row < height; ++row) for (int col = 0; col < width; ++col)
       if ((data[row * ((width + 7) / 8) + col / 8] >> (7 - col % 8)) & 1)
