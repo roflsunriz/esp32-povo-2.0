@@ -56,8 +56,8 @@ String date(uint64_t epoch) {
 }
 void beginDisplay() {
   tft.init(); tft.setRotation(1); tft.setTextColor(fg, bg);
-  ledcSetup(0, 5000, 8); ledcAttachPin(TFT_BL, 0);
-  ledcWrite(0, constrain(POVO_BRIGHTNESS, 0, 255));
+  ledcAttach(TFT_BL, 5000, 8);
+  ledcWrite(TFT_BL, constrain(POVO_BRIGHTNESS, 0, 255));
 }
 void drawDisplay(const povo::Status* status, uint64_t elapsedMs, const char* error) {
   using namespace povo;

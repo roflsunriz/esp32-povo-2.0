@@ -8,20 +8,23 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.12'
-      - run: pip install platformio
+      - run: pip install -r requirements-ci.txt
+      - run: python test/audit-test.py && python scripts/audit-build-tools.py
       - run: pio run -e cyd
       - run: cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure
+      - run: python scripts/generate-font.py && git diff --exit-code -- include/japanese-font.h
       - name: Extract notes and package tracked source
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           python scripts/release-notes.py "$RELEASE_TAG" > release-notes.md
           git archive --format=zip --output=povo-cyd-source.zip HEAD
+          sha256sum povo-cyd-source.zip > SHA256SUMS.txt
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" povo-cyd-source.zip --notes-file release-notes.md
+        run: gh release create "$GITHUB_REF_NAME" povo-cyd-source.zip SHA256SUMS.txt --verify-tag --prerelease --title "$GITHUB_REF_NAME 初回プレビュー" --notes-file release-notes.md

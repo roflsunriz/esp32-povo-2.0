@@ -6,6 +6,8 @@
 パッチ版povoアプリ → HTTPS PUT → PC中継 ← HTTPS GET ← CYD
 ```
 
+初回リリースは実機未検証のプレビューです。リリースの `povo-cyd-source.zip` を展開し、[設定・ビルド手順](how-to-update.md)へ進んでください。配布物に個人設定や設定済みファームウェアは含まれません。
+
 ## 用意するもの
 
 - この用途専用のESP32-2432S028Rと2.4 GHz Wi-Fi

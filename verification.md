@@ -23,6 +23,14 @@
 - `pio check --skip-packages` は終了コード0ですが、toolchain defines抽出警告と依存ライブラリの解析警告があります。HIGHの `ConverterImpl.hpp` の `dummy` は実ソースで `T dummy = T();` と初期化されており、テンプレート解析の誤検出です。表示関数の未使用警告は実際の `setup/loop` 呼び出しとホスト描画テストで使用を確認しました。警告ゼロや包括的な脆弱性監査の合格とは扱いません。
 - このPCのCMake自動検出はVisual Studioビルドツール構成を解決できなかったため、Developer Command Promptのコンパイラを直接使用しました。CI定義は追加済みですが、リモート実行は未実施です。
 
+## v0.1.0公開前の追加検証
+
+- 脆弱性調査で旧Mbed TLSのCVE-2025-27810を検出したため、pioarduino 55.03.311 / Arduino 3.3.11 / ESP-IDF 5.5.5へ移行。SDK設定と使用経路の評価は `SECURITY.md` を参照。
+- 新SDKで設定なしビルド成功（RAM 37,032 / Flash 609,895 bytes）。非秘密の一時設定によるHTTPS経路のリンクも成功（RAM 53,324 / Flash 1,045,139 bytes）。一時設定は削除。
+- MSVC `/W4 /WX` の状態テストとUI 96状態テスト成功。字形再生成の差分なし。
+- `pip-audit` でビルド・監査ツール42パッケージを確認。StarletteのHome専用経路5件（DB重複を含め7検出）を範囲限定で評価し、未評価の検出は0。検出を隠さず全レポートを保存するCI検査を追加。
+- YAML構文、リリースノート抽出、Git差分を確認。GitHubのChecksとRelease sourceは公開時にも同じビルド・テスト・監査を実行。
+
 ## 専用基板到着後の実機検証
 
 接続済みのCodex Microを使用しません。新しい基板のポートを明示して書き込み、次を確認します。

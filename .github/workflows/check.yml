@@ -6,11 +6,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.12'
-      - run: pip install platformio
+      - run: pip install -r requirements-ci.txt
+      - run: python test/audit-test.py && python scripts/audit-build-tools.py
       - run: pio run -e cyd
       - run: cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure
       - run: python scripts/generate-font.py && git diff --exit-code -- include/japanese-font.h
