@@ -15,8 +15,6 @@
 - Python 3.10以降を実行できるPC、およびAndroidが信頼するHTTPS証明書
 - ファームウェアを構築するPlatformIO Core
 
-現在PCに接続しているCodex Microは使用禁止です。購入済みの追加基板が届いてから、その基板だけを書き込み対象にしてください。
-
 ## PCとAndroidを設定する
 
 PC中継は関連プロジェクトの既存実装を利用します。[中継の起動・証明書・トークン設定](https://github.com/roflsunriz/povo-2.0-revanced/blob/main/relay/README.md)に従い、PCで中継を起動してください。ローカルにある場合は、そのリポジトリで `python -m relay.server` を実行します。
@@ -39,7 +37,7 @@ PCは起動・ネットワーク接続を維持してください。スリープ
 
 ## 開発・検証
 
-[更新とビルド](how-to-update.md)、[検証手順と未検証事項](verification.md)、[原案](original-idea.md)を参照してください。実機の表示・無線接続は追加基板到着後に確認します。
+[更新とビルド](how-to-update.md)、[検証手順と未検証事項](verification.md)、[原案](original-idea.md)を参照してください。
 
 表示文言は日本語で `include/ui-text.h` に集約しています。現段階の画面は日本語のみです。
 
