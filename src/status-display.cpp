@@ -73,12 +73,19 @@ void drawDisplay(const povo::Status* status, uint64_t elapsedMs, const char* err
       (unsigned long long)(v.remainingSeconds / 3600), (unsigned long long)(v.remainingSeconds / 60 % 60)); line(54, buffer);
   }
   line(76, (String(text::expiry) + date(status->expiryAtMs) + " [" + text::sources[(int)status->expirySource] + "]").c_str());
-  snprintf(buffer, sizeof(buffer), text::renewal, status->automaticRenewal ? "ON" : "OFF", (unsigned long)status->appliedUses, (unsigned long)status->maxUses); line(98, buffer);
-  String state = text::states[(int)status->renewalState];
-  if (v.confirmationPending) state += String(" / ") + text::pending;
-  line(120, state.c_str(), accent);
-  line(142, (String(text::codeDeadline) + date(status->codeDeadlineAtMs)).c_str());
+  line(98, text::directMode);
+  if (v.confirmationPending) line(120, text::pending, accent);
+  line(142, text::precision);
   snprintf(buffer, sizeof(buffer), text::sync, (unsigned long long)(v.syncAgeMs / 60000)); line(164, buffer);
   if (v.stale) line(186, text::stale, accent);
   if (error) line(208, error, accent);
+}
+void drawSetup(const char* ssid, const char* password) {
+  tft.fillScreen(bg);
+  line(6, povo::text::setupTitle, accent);
+  line(38, povo::text::setupWifi);
+  line(62, ssid, accent);
+  line(90, "Password:"); line(112, password, accent);
+  line(152, povo::text::setupOpen);
+  line(178, "http://192.168.4.1", accent);
 }

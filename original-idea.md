@@ -1,3 +1,5 @@
+これは中継方式を検討した当初の記録です。現行の直接認証方式はREADME.mdを参照してください。
+
 USER:
 CYD ESP32 ILI9341 2432S028Rでpovo 2.0のexpire dateとremaining hours and daysを常時表示しておくのは良いアイディア？プロジェクトは"esp32-codex-notifications"と"povo-2.0-revanced"に関連がある。ReVancedパッチ版povo 2.0アプリ自体にリニューは任せておくとして、APIを使って数分おきに更新する、みたいな。
 

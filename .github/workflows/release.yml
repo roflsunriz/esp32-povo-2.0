@@ -13,9 +13,10 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements-ci.txt
-      - run: python test/audit-test.py && python scripts/audit-build-tools.py
+      - run: python test/audit-test.py && python test/capture-auth-test.py && python scripts/audit-build-tools.py
       - run: pio run -e cyd
       - run: cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure
+      - run: node test/portal-test.mjs
       - run: python scripts/generate-font.py && git diff --exit-code -- include/japanese-font.h
       - name: Extract notes and package tracked source
         env:

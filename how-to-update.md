@@ -1,16 +1,14 @@
 # セットアップと更新
 
-## 初回設定・ビルド
+## ビルド
 
-PlatformIO CoreとPython 3.10以降を用意し、リポジトリ直下で実行します。
-
-リリース検証と同じビルドツールを用意する場合はPython 3.12以降で `python -m pip install -r requirements-ci.txt` を実行します。この環境ではCLIビルドを使用し、PlatformIO Homeは起動しません（理由は `SECURITY.md`）。
+PlatformIO CoreとPythonを用意します。検証と同じツールを使う場合は、Python 3.12以降で `python -m pip install -r requirements-ci.txt` を実行します。
 
 ```powershell
 Copy-Item include/device-config.example.h include/device-config.h
 ```
 
-`include/device-config.h` に2.4 GHz Wi-FiのSSID・パスワード、中継のHTTPS URL、読み取りトークン、PEM形式のルートCAを設定します。PEMを複数行で設定する場合はC++のraw文字列 `R"PEM(証明書本文)PEM"` を使います。NTPサーバーはLANから到達できるものを選びます。明るさは `POVO_BRIGHTNESS`（0〜255）です。未設定のビルドは設定不足画面になります。
+`include/device-config.h` のWi-Fi SSID・パスワードを設定します。公式povoホストを検証する公開ルートCAは同梱しています。NTPサーバーはLANから到達できるものを選びます。明るさは `POVO_BRIGHTNESS`（0〜255）です。
 
 ```powershell
 New-Item -ItemType Directory -Force .pio-core | Out-Null
@@ -18,37 +16,45 @@ $env:PLATFORMIO_CORE_DIR = (Resolve-Path .pio-core).Path
 pio run -e cyd
 ```
 
-このコマンドはコンパイルだけを実行します。個人設定入りの `.pio/build/cyd/firmware.bin` を公開・添付しないでください。
+このコマンドはビルドだけを行います。Wi-Fi設定入りのファームウェアを公開しないでください。
 
-## 基板への書き込み
+## 専用基板への書き込み
 
-基板の接続前後でWindowsデバイスマネージャーのポートを確認し、書き込み対象のCOM番号を指定します。
+接続前後のポートを確認して、対象COM番号を明示します。別用途で使用中の基板には書き込まないでください。
 
 ```powershell
 pio run -e cyd -t upload --upload-port COM番号
 ```
 
-`COM番号` は確認した実際のポート名に置き換えます。書き込み後は `verification.md` の実機手順を実施します。
+起動後は[READMEのメール認証手順](README.md#使い始める)へ進みます。設定用Wi-Fiのパスワードは起動ごとに生成し、画面へ表示します。メールOTPの有効期限は2分として扱い、保存しません。認証トークンと端末IDは本体NVSの `povo-auth` 名前空間へ保存します。
+
+## 旧中継方式から移行
+
+`POVO_STATUS_URL` と `POVO_READ_TOKEN` は廃止しました。設定ファイルを現行の例から作り直し、Wi-Fiと明るさの設定だけを移します。`POVO_ROOT_CA` が旧中継用証明書なら、例の `povo::rootCa` へ変更してください。旧中継サーバー・パッチ版アプリの停止は、直接取得を専用基板で確認した後に行ってください。
+
+旧版のコード適用回数や推定期限を認証データへ移行する処理はありません。直接ログインを新規に行います。認証保存形式が不正・破損・未対応なら、正常な認証として採用せずメールログインへ戻ります。
 
 ## 更新・復旧
 
-個人設定を安全にバックアップし、変更内容を確認してソースを更新します。`device-config.example.h` の変更を個人設定へ反映して再ビルドします。日本語文言変更時は `python scripts/generate-font.py` で字形を再生成します。
+個人設定を安全にバックアップしてソースを更新し、再ビルドします。通常のファームウェア更新ではNVSの認証を再利用します。認証が拒否される場合は設定用Wi-Fiから再ログインします。日本語表示の文言変更時は `python scripts/generate-font.py` で字形を再生成します。
 
-v0.1.0ではTLS修正を取り込むため、ビルド基盤をpioarduino 55.03.311（Arduino 3.3.11 / ESP-IDF 5.5.5）へ移行しました。初回ビルドでは新しいSDKをダウンロードするため時間がかかります。旧SDKのキャッシュを手動で編集する必要はありません。
+全消去が必要な場合は対象ポートを厳重に確認し、その専用基板だけを消去して書き直します。NVS消去で認証も消えるため再ログインが必要です。ロールバックしてv0.1.0へ戻す場合は、その版に対応する旧中継設定も必要になります。
 
-不具合時は以前のソースと設定で再ビルドし、専用基板へ書き戻します。PC中継の更新・DBバックアップ・復旧は関連プロジェクトの `relay/README.md` に従います。このファームウェアはpovoのコードや中継DBを変更しません。
+ルートCA更新は保守作業です。Python 3.13以降で `python scripts/update-povo-ca.py` を実行すると、OSで検証済みの `app.povo.jp` の証明書チェーンから公開ルートを再生成します。証明書の発行者・期限・差分を確認してから採用し、証明書検証自体を無効化しないでください。
 
 ## 開発チェック
 
 ```powershell
+python test/capture-auth-test.py
 python test/audit-test.py
 python scripts/audit-build-tools.py
 pio run -e cyd
-cmake -S . -B build
-cmake --build build --config Release
-ctest --test-dir build -C Release --output-on-failure
+cmake -S . -B build/host
+cmake --build build/host
+ctest --test-dir build/host --output-on-failure
+node test/portal-test.mjs
 python scripts/generate-font.py
 git diff --exit-code -- include/japanese-font.h
 ```
 
-CMakeにはホストC++コンパイラが必要です。Visual StudioではDeveloper Command Promptを利用できます。CMakeが利用できない場合も `test/status-test.cpp` をC++17、`include` と `.pio/libdeps/cyd/ArduinoJson/src` のインクルードパスでコンパイルして実行できます。
+ホストテストにはC++17コンパイラが必要です。WindowsではVisual Studio Developer Command Promptで、`cmake -S . -B build/host -G "NMake Makefiles"` を使用できます。ブラウザテストにはNode 22以降とChromeが必要です。既定位置にない場合は `CHROME_PATH` 環境変数でChrome実行ファイルを指定します。
