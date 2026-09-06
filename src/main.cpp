@@ -16,7 +16,7 @@ namespace {
 povo::Client client;
 povo::Status status;
 bool configured = false, started = false, haveStatus = false;
-uint64_t nextPoll = 0, nextDraw = 0, receivedAt = 0, nextInit = 0;
+uint64_t nextPoll = 0, nextDraw = 0, receivedAt = 0, nextInit = 0, nextWifiRetry = 0;
 const char* failure = nullptr;
 uint64_t ms() { return esp_timer_get_time() / 1000; }
 }
@@ -32,7 +32,13 @@ void loop() {
   if (!configured) { delay(1000); return; }
   servicePortal();
   const uint64_t now = ms();
-  if (WiFi.status() != WL_CONNECTED) failure = povo::text::wifi;
+  if (WiFi.status() != WL_CONNECTED) {
+    failure = povo::text::wifi;
+    if (now >= nextWifiRetry) {
+      WiFi.begin(POVO_WIFI_SSID, POVO_WIFI_PASSWORD);
+      nextWifiRetry = now + 10000;
+    }
+  }
   else if (time(nullptr) < 1700000000) failure = povo::text::clock;
   else {
     if (!started && now >= nextInit) {

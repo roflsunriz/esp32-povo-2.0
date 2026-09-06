@@ -20,8 +20,14 @@ Get-Content -Raw -LiteralPath .\COMMON-AGENTS.md
 - 原型は ./original-idea.md にある
 
 ## 制約
-- PCに接続済みのESP32はCodex Micro (esp32-codex-notifications) として使用中なので検証に使うのは禁止する
+- PCに接続済みのESP32はCodex Micro (esp32-codex-notifications) として使用中なので検証に使うのは禁止する。所有者の明示指示がある場合だけ、全flash退避→検証→書き戻し→ `CODEX_CYD_READY` 確認の手順で例外的に使う。
 - アリエクスプレスで追加のESP32を購入済みで数日すると着く予定なのでそれを使う
+
+## 実機検証の所見（2026-09-06）
+- STA接続は2.4 GHz帯が必須で、5 GHz帯は不可。WPA2/WPA3混在のPCホットスポットで接続を確認した。
+- 切断中は10秒ごとに `WiFi.begin` を再試行する（`src/main.cpp`）。 `setAutoReconnect(true)` だけではホットスポットOFF→ON後に復帰しなかった。
+- 設定用APは `povo-setup-` +ランダム4文字・パスワードはランダム16文字で画面表示する。固定名にはできない。
+- 現用基板の全flash 4MB退避は `.pio-core/penv` のpythonでesptoolを実行し、 `build/backup-codex-micro/`（Git管理外）へ保存した。CP932環境では進捗表示で例外になるためUTF-8設定が必要。
 
 ## 直接認証の調査資料
 - パッチ版アプリ・PC中継への依存を廃止するための認証調査は `docs/auth-capture/` に保存する。静的解析の根拠は `static-analysis.md`、実測と再採取手順は同ディレクトリの `README.md` を参照する。静的解析と実機観測を混同しない。
