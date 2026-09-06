@@ -28,6 +28,7 @@ Get-Content -Raw -LiteralPath .\COMMON-AGENTS.md
 - 切断中は10秒ごとに `WiFi.begin` を再試行する（`src/main.cpp`）。 `setAutoReconnect(true)` だけではホットスポットOFF→ON後に復帰しなかった。
 - 設定用APは `povo-setup-` +ランダム4文字・パスワードはランダム16文字で画面表示する。固定名にはできない。
 - 現用基板の全flash 4MB退避は `.pio-core/penv` のpythonでesptoolを実行し、 `build/backup-codex-micro/`（Git管理外）へ保存した。CP932環境では進捗表示で例外になるためUTF-8設定が必要。
+- 実運用はモバイルルーター等の2.4 GHz帯へ直接接続する。 `include/device-config.h`（Git管理外）には2026-09-06検証時の一時的なPCホットスポット設定が残っているため、次回書き込み時は実運用APに設定し直す。
 
 ## 直接認証の調査資料
 - パッチ版アプリ・PC中継への依存を廃止するための認証調査は `docs/auth-capture/` に保存する。静的解析の根拠は `static-analysis.md`、実測と再採取手順は同ディレクトリの `README.md` を参照する。静的解析と実機観測を混同しない。

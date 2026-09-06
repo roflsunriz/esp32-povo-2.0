@@ -8,7 +8,7 @@ PlatformIO CoreとPythonを用意します。検証と同じCLI専用ツール�
 Copy-Item include/device-config.example.h include/device-config.h
 ```
 
-`include/device-config.h` のWi-Fi SSID・パスワードを設定します。公式povoホストを検証する公開ルートCAは同梱しています。NTPサーバーはLANから到達できるものを選びます。明るさは `POVO_BRIGHTNESS`（0〜255）です。
+`include/device-config.h` のWi-Fi SSID・パスワードを設定します。実運用はモバイルルーター等の2.4 GHz帯へ直接接続してください。PCホットスポット経由は一時的な検証用です。公式povoホストを検証する公開ルートCAは同梱しています。NTPサーバーはLANから到達できるものを選びます。明るさは `POVO_BRIGHTNESS`（0〜255）です。
 
 ```powershell
 New-Item -ItemType Directory -Force .pio-core | Out-Null
