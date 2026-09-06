@@ -17,7 +17,10 @@ int main(int argc, char** argv) {
     const char* messages[] = {text::title, text::unknown, text::pending, text::stale,
       text::noStatus, text::configuring, text::wifi, text::clock, text::connection,
       text::unauthorized, text::unavailable, text::invalid, text::directMode, text::precision,
-      text::setupTitle, text::setupWifi, text::setupOpen, text::portalError, text::storageError};
+      text::setupTitle, text::setupWifi, text::setupOpen, text::portalError, text::storageError,
+      text::tabStatus, text::tabSleep, text::sleepTitle, text::sleepNow, text::sleepSelect,
+      text::sleepPrev, text::sleepNext, text::rotateHint, text::sleepNone,
+      text::sleepSecUnit, text::sleepMinUnit, text::sleepHourUnit};
     for (const char* message : messages) { checkLine(message); drawDisplay(nullptr, 0, message); }
     for (const char* source : text::sources) checkLine(std::string(text::expiry) + "12/31 23:59 JST [" + source + "]");
     char buffer[96];
@@ -37,6 +40,21 @@ int main(int argc, char** argv) {
     }
     s.expirySource = ExpirySource::Server;
     drawDisplay(&s, 120000, nullptr);
+    if (ui::missing) throw std::runtime_error("unknown glyph in status with tabs");
+    for (uint32_t seconds : {0U, 15U, 30U, 60U, 120U, 300U, 600U, 1800U, 3600U,
+                             7200U, 43200U, 86400U}) {
+      if (!setSleepTimeout(seconds)) throw std::runtime_error("unknown timeout option");
+      setDisplayPage(povo::display::Page::Sleep);
+      drawDisplay(&s, 120000, nullptr);
+      if (ui::missing) throw std::runtime_error("unknown glyph in sleep settings");
+    }
+    if (setSleepTimeout(12345U)) throw std::runtime_error("invalid timeout accepted");
+    toggleDisplayRotation();
+    setDisplayPage(povo::display::Page::Sleep);
+    drawDisplay(&s, 120000, nullptr);
+    if (ui::missing) throw std::runtime_error("unknown glyph in rotated settings");
+    toggleDisplayRotation();
+    setDisplayPage(povo::display::Page::Status);
     if (argc > 1) ui::ppm(argv[1]);
     drawSetup("povo-setup-ABCD", "ABCDEFGH23456789");
     if (ui::missing) throw std::runtime_error("unknown glyph in setup display");

@@ -32,6 +32,9 @@ void loop() {
   if (!configured) { delay(1000); return; }
   servicePortal();
   const uint64_t now = ms();
+  if (portalActive()) { delay(5); return; }
+  pollDisplayInput(now);
+  updateDisplayPower(now);
   if (WiFi.status() != WL_CONNECTED) {
     failure = povo::text::wifi;
     if (now >= nextWifiRetry) {
@@ -61,7 +64,7 @@ void loop() {
       nextPoll = ms() + 300000; nextDraw = 0;
     }
   }
-  if (!portalActive() && now >= nextDraw) {
+  if (!portalActive() && displayAwake() && now >= nextDraw) {
     drawDisplay(haveStatus ? &status : nullptr, haveStatus ? ms() - receivedAt : 0, failure);
     nextDraw = ms() + 60000;
   }

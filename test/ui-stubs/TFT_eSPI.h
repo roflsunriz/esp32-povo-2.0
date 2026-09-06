@@ -25,9 +25,16 @@ inline void ppm(const char* path) {
 class TFT_eSPI {
  public:
   void init() {}
-  void setRotation(int rotation) { if (rotation != 1) throw std::runtime_error("wrong rotation"); }
+  void setRotation(int rotation) {
+    if (rotation != 1 && rotation != 3) throw std::runtime_error("wrong rotation");
+  }
   void setTextColor(uint16_t, uint16_t) {}
   void fillScreen(uint16_t color) { ui::pixels.fill(color); ui::glyphCount = ui::missing = 0; }
+  void fillRect(int x, int y, int width, int height, uint16_t color) {
+    for (int row = 0; row < height; ++row)
+      for (int col = 0; col < width; ++col) ui::pixel(x + col, y + row, color);
+  }
+  void writecommand(uint8_t) {}
   void drawChar(uint16_t, int, int, int) {
     throw std::runtime_error("legacy font must not be mixed with 16px glyphs");
   }

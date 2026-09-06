@@ -24,4 +24,16 @@ constexpr const char* setupWifi = "次のWi-Fiに接続";
 constexpr const char* setupOpen = "接続後ブラウザで開く";
 constexpr const char* portalError = "設定用Wi-Fiの起動失敗";
 constexpr const char* storageError = "認証の保存領域を確認";
+constexpr const char* tabStatus = "表示";
+constexpr const char* tabSleep = "自動消灯";
+constexpr const char* sleepTitle = "自動消灯設定";
+constexpr const char* sleepNow = "現在";
+constexpr const char* sleepSelect = "タッチで選択";
+constexpr const char* sleepPrev = "前へ";
+constexpr const char* sleepNext = "次へ";
+constexpr const char* sleepNone = "なし";
+constexpr const char* sleepSecUnit = "秒";
+constexpr const char* sleepMinUnit = "分";
+constexpr const char* sleepHourUnit = "時間";
+constexpr const char* rotateHint = "BOOT1回で画面反転";
 } }

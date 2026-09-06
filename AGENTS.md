@@ -30,6 +30,13 @@ Get-Content -Raw -LiteralPath .\COMMON-AGENTS.md
 - 現用基板の全flash 4MB退避は `.pio-core/penv` のpythonでesptoolを実行し、 `build/backup-codex-micro/`（Git管理外）へ保存した。CP932環境では進捗表示で例外になるためUTF-8設定が必要。
 - 実運用はモバイルルーター等の2.4 GHz帯へ直接接続する。 `include/device-config.h`（Git管理外）には2026-09-06検証時の一時的なPCホットスポット設定が残っているため、次回書き込み時は実運用APに設定し直す。
 
+## 画面タブ・自動消灯・反転の実装記録（2026-09-07・実機未検証）
+- タッチはXPT2046をTFTと別バスのVSPI（CLK 25・MISO 39・MOSI 32・CS 33・IRQ 36、押圧閾値120）で読む（`src/status-display.cpp`）。TFTとタッチのピンが別系統のためTFT_eSPI内蔵タッチは使わない。代表値はcodex-notificationsの `board-config.h` と同じ。
+- BOOTボタンはGPIO0（INPUT_PULLUP）。30msチャタリング除去・50ms以上押して離したら1回押しで上下反転（rotation 1⇔3、タッチ座標も反転）。
+- 消灯設定32件（なし・15秒・30秒・1分・2分・5分・10分・30分・1時間・2〜24時間毎時）は `include/display-settings.h` に純粋ロジックとして集約し `test/display-settings-test.cpp` で検証する。表示文言の正本は `include/ui-text.h`、字形は `scripts/generate-font.py` で再生成する。
+- 設定と画面向きはNVS `povo-display`（sleep_sec・inverted）に保存する。消灯中も取得は継続し描画だけ休止する。設定用ポータル表示中はタブ・消灯を適用しない。
+- 2026-09-07はホスト6テスト・PIOビルド・Chrome設定画面テストまで成功。タッチ・消灯・復帰・反転の実機確認は追加基板待ちで未実施（`verification.md` の残り7番）。
+
 ## 直接認証の調査資料
 - パッチ版アプリ・PC中継への依存を廃止するための認証調査は `docs/auth-capture/` に保存する。静的解析の根拠は `static-analysis.md`、実測と再採取手順は同ディレクトリの `README.md` を参照する。静的解析と実機観測を混同しない。
 - 2026-09-05の検証対象はPixel 10a上の `com.kddi.kdla.jp` 1.70.0-JP（857）。ADBは必ず対象端末を `-s` で指定する。同時接続の別AndroidやESP32を操作しない。
