@@ -28,6 +28,7 @@ Get-Content -Raw -LiteralPath .\COMMON-AGENTS.md
 - `requirements-ci.txt` はPlatformIO Homeを除いたCLI用の明示固定リストであり、`--no-deps` で導入する。`test/audit-test.py` はPlatformIOの存在・全項目の完全固定・Homeサーバー依存の除外を検査する。更新を妨げる古いバージョン文字列はテストへ埋め込まない。
 - PlatformIOを更新するときは、依存メタデータとCLIビルドの動作を確認し、`scripts/audit-build-tools.py`、ホストテスト、設定画面テストを実行する。2026-09-13時点の更新理由と検証範囲は `verification.md` を参照する。
 - ホストテストの一部は標準assertを使う。Releaseで検査が消えないよう該当テスト内でNDEBUGを解除する。MSVCでは `cmake --build build/host --config Release` と `ctest --test-dir build/host -C Release --output-on-failure` も確認する。
+- 配布物は `.github/workflows/release.yml` が `git archive` で作るソースZIPとSHA-256一覧であり、個人設定入りファームウェアではない。依存更新も配布ソースの変更になる。版はCHANGELOGの該当節と `vX.Y.Z` タグで管理し、`scripts/release-notes.py` はリポジトリ直下で実行する。
 
 ## 実機検証の所見（2026-09-06）
 - STA接続は2.4 GHz帯が必須で、WPA2のPCホットスポットで接続を確認した。5 GHz帯とWPA2/WPA3混在は未検証。
