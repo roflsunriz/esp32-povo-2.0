@@ -44,6 +44,8 @@ pio run -e cyd -t upload --upload-port COM番号
 
 ## 開発チェック
 
+Dependabotの更新を取り込む場合は、`requirements-ci.txt` の版固定と更新対象の依存メタデータを確認し、下記をすべて実行します。監査テストはPlatformIOの存在、全項目の完全固定、Homeサーバー依存の除外を保証し、特定の旧バージョンへの一致は要求しません。更新の取り消しは該当コミットをrevertし、同じ依存構成を入れ直して再検証します。
+
 ```powershell
 python test/capture-auth-test.py
 python test/audit-test.py

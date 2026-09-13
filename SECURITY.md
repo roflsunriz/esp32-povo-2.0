@@ -14,7 +14,7 @@ NVSは単一のスキーマ付きレコードとして保存し、保存に失�
 
 `requirements-ci.txt` にCLIビルドと監査で実際にインストールするパッケージを固定し、`python scripts/audit-build-tools.py` でPyPIの既知脆弱性を照会します。未評価の検出や照会失敗はCIを失敗させ、全結果を `build/build-tools-audit.json` に残します。
 
-PlatformIO 6.1.19の通常インストールは、CLIビルドで使わないPlatformIO Home用のStarlette、Uvicorn、wsproto、ajsonrpcも導入します。Starlette 0.52.1の公開脆弱性をビルド環境から除くため、CIは全パッケージを明示固定し、`pip install --no-deps -r requirements-ci.txt` でHomeサーバー依存をインストールしません。この構成で隔離環境の `pio run -e cyd` と監査の動作を確認しています。**この環境で `pio home` は利用できません。** Homeが必要なら、PlatformIOが修正版Starletteに対応した版へ更新し、依存一式を再監査してください。
+PlatformIOの通常インストールは、CLIビルドで使わないPlatformIO Home用のStarlette、Uvicorn、wsproto、ajsonrpcも導入します（2026-09-13に6.2.0の依存メタデータでも確認）。未使用サーバー依存の脆弱性をビルド環境へ持ち込まないため、CIは全パッケージを明示固定し、`pip install --no-deps -r requirements-ci.txt` でHomeサーバー依存をインストールしません。**この環境で `pio home` は利用できません。** Homeが必要なら、依存一式を別環境へ解決して再監査してください。CLI構成の検証方法は `how-to-update.md` を参照してください。
 
 ## ファームウェア依存の確認（2026-09-05）
 

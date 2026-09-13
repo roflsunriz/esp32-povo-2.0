@@ -23,6 +23,12 @@ Get-Content -Raw -LiteralPath .\COMMON-AGENTS.md
 - PCに接続済みのESP32はCodex Micro (esp32-codex-notifications) として使用中なので検証に使うのは禁止する。所有者の明示指示がある場合だけ、全flash退避→検証→書き戻し→ `CODEX_CYD_READY` 確認の手順で例外的に使う。
 - アリエクスプレスで追加のESP32を購入済みで数日すると着く予定なのでそれを使う
 
+## ビルド依存の更新
+
+- `requirements-ci.txt` はPlatformIO Homeを除いたCLI用の明示固定リストであり、`--no-deps` で導入する。`test/audit-test.py` はPlatformIOの存在・全項目の完全固定・Homeサーバー依存の除外を検査する。更新を妨げる古いバージョン文字列はテストへ埋め込まない。
+- PlatformIOを更新するときは、依存メタデータとCLIビルドの動作を確認し、`scripts/audit-build-tools.py`、ホストテスト、設定画面テストを実行する。2026-09-13時点の更新理由と検証範囲は `verification.md` を参照する。
+- ホストテストの一部は標準assertを使う。Releaseで検査が消えないよう該当テスト内でNDEBUGを解除する。MSVCでは `cmake --build build/host --config Release` と `ctest --test-dir build/host -C Release --output-on-failure` も確認する。
+
 ## 実機検証の所見（2026-09-06）
 - STA接続は2.4 GHz帯が必須で、WPA2のPCホットスポットで接続を確認した。5 GHz帯とWPA2/WPA3混在は未検証。
 - 切断中は10秒ごとに `WiFi.begin` を再試行する（`src/main.cpp`）。 `setAutoReconnect(true)` だけではホットスポットOFF→ON後に復帰しなかった。
