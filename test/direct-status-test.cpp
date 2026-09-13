@@ -1,3 +1,7 @@
+// Assertions are the test checks and must also run in Release builds.
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <fstream>
 #include <iterator>
