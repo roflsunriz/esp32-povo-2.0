@@ -30,12 +30,13 @@ Get-Content -Raw -LiteralPath .\COMMON-AGENTS.md
 - ホストテストの一部は標準assertを使う。Releaseで検査が消えないよう該当テスト内でNDEBUGを解除する。MSVCでは `cmake --build build/host --config Release` と `ctest --test-dir build/host -C Release --output-on-failure` も確認する。
 - 配布物は `.github/workflows/release.yml` が `git archive` で作るソースZIPとSHA-256一覧であり、個人設定入りファームウェアではない。依存更新も配布ソースの変更になる。版はCHANGELOGの該当節と `vX.Y.Z` タグで管理し、`scripts/release-notes.py` はリポジトリ直下で実行する。
 
-## 実機検証の所見（2026-09-06）
+## 実機検証の所見（2026-09-06〜2026-09-14）
+- 2026-09-14の現在接続ではCOM3のCodex MicroはUSB位置`1-8.1`、ユーザーがpovo専用基板と説明したCOM4は別位置`1-7`のCH340。COM4へのesptool自動リセット接続は`Wrong boot mode detected (0x13)`、手動モード待ちの`no-reset`接続は`No serial data received`で停止し、まだ読み取り・書き込みをしていない。以後もCOM3へは接続せず、COM4を手動BOOT+RSTでdownload modeに入れ、全flash退避・照合後に進める。ユーザーは現行`include/device-config.h`のSSIDを実運用APとして確認し、ローカルビルドにも同設定が含まれることを値を表示せず確認した。
 - STA接続は2.4 GHz帯が必須で、WPA2のPCホットスポットで接続を確認した。5 GHz帯とWPA2/WPA3混在は未検証。
 - 切断中は10秒ごとに `WiFi.begin` を再試行する（`src/main.cpp`）。 `setAutoReconnect(true)` だけではホットスポットOFF→ON後に復帰しなかった。
 - 設定用APは `povo-setup-` +ランダム4文字・パスワードはランダム16文字で画面表示する。固定名にはできない。
 - 現用基板の全flash 4MB退避は `.pio-core/penv` のpythonでesptoolを実行し、 `build/backup-codex-micro/`（Git管理外）へ保存した。CP932環境では進捗表示で例外になるためUTF-8設定が必要。
-- 実運用はモバイルルーター等の2.4 GHz帯へ直接接続する。 `include/device-config.h`（Git管理外）には2026-09-06検証時の一時的なPCホットスポット設定が残っているため、次回書き込み時は実運用APに設定し直す。
+- 実運用はモバイルルーター等の2.4 GHz帯へ直接接続する。`include/device-config.h`（Git管理外）は2026-09-06には一時PCホットスポットとして記録したが、2026-09-14にユーザーが現行SSIDをCOM4用の実運用APと確認した。パスワードを表示せずに設定済みとローカルビルドへの同梱を確認した。秘密のWi-Fi値や設定入りファームウェアをコミット・公開しない。
 
 ## 画面タブ・自動消灯・反転の実装記録（2026-09-07・実機未検証）
 - タッチはXPT2046をTFTと別バスのVSPI（CLK 25・MISO 39・MOSI 32・CS 33・IRQ 36）で読み、`lib/sensitive-xpt2046` と近接3回の判定はcodex-notifications式を使う。TFTとタッチのピンが別系統のためTFT_eSPI内蔵タッチは使わない。旧読み取りは最後にPD0=1を残してPENIRQを無効化していたため、ドライバー末尾のPD0=0変換を維持する。消灯中の接触は離すまで復帰専用とする。2026-09-14時点でこの修正と校正はビルド・ホストテスト済み、実機未検証。
