@@ -4,6 +4,8 @@
 
 COM3のCodex Microと、ユーザーがpovo専用と説明したCOM4は異なるUSB接続位置のCH340と確認した。COM4に限定してesptoolでフラッシュ情報を読もうとしたが、通常起動では`Wrong boot mode detected (0x13)`、`no-reset`では`No serial data received`となった。COM4のフラッシュ読み取り・書き込みはまだ行っていない。現行のローカルWi-Fi設定をユーザーが実運用APと確認し、値を表示せずにファームウェアへの同梱を確認した。手動BOOT+RSTで書き込みモードへ入れ、全フラッシュを退避・照合してから専用基板だけを更新する。
 
+v0.5.0のmain CIとタグ起点リリースは成功。公開ソースZIPには新しいタッチ・差分描画のソースが含まれ、Git管理外の`include/device-config.h`は含まれない。公開`SHA256SUMS.txt`とGitHub asset digestをZIPのSHA-256と照合した。COM4実機の未検証状態は変わらない。
+
 ## ビルド依存の更新（2026-09-13）
 
 PlatformIO 6.2.0、platformdirs 4.11.8、filelock 3.32.6、pip-api 0.0.35を隔離したPython環境へ `--no-deps` で導入した。旧PlatformIO番号への一致で失敗していた監査テストを修正し、監査テスト1件と秘密値除去テスト2件が成功。37個の明示依存の監査で既知脆弱性0件を確認した。
