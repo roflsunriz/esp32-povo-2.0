@@ -36,4 +36,10 @@ constexpr const char* sleepSecUnit = "秒";
 constexpr const char* sleepMinUnit = "分";
 constexpr const char* sleepHourUnit = "時間";
 constexpr const char* rotateHint = "BOOT1回で画面反転";
+constexpr const char* touchStep1 = "タッチ調整 1/2";
+constexpr const char* touchStep2 = "タッチ調整 2/2";
+constexpr const char* touchInstruction = "十字をペンで押して離す";
+constexpr const char* touchTimeout = "反応なし・タッチ面を確認";
+constexpr const char* touchInvalid = "調整失敗・もう一度試す";
+constexpr const char* touchSaveError = "保存失敗・再調整して下さい";
 } }

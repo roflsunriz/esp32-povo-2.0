@@ -44,6 +44,8 @@ constexpr uint8_t kRotationInverted = 3;
 
 constexpr uint32_t kBootDebounceMs = 30;
 constexpr uint32_t kBootPressMinMs = 50;
+constexpr uint32_t kBootCalibrationHoldMs = 1500;
+enum class BootAction : uint8_t { None, Rotate, Calibrate };
 
 struct Point {
   int x = 0;
@@ -151,23 +153,25 @@ inline void bootInit(BootFilter& filter, bool rawHigh, uint64_t nowMs) {
 }
 
 // 離した瞬間に1回押し成立でtrue。チャタリング30ms、50ms未満の短絡は無視。
-inline bool bootUpdate(BootFilter& filter, bool rawHigh, uint64_t nowMs) {
+inline BootAction bootUpdate(BootFilter& filter, bool rawHigh, uint64_t nowMs) {
   if (rawHigh != filter.rawHigh) {
     filter.rawHigh = rawHigh;
     filter.changedAt = nowMs;
   }
   if (rawHigh == filter.stableHigh || nowMs - filter.changedAt < kBootDebounceMs)
-    return false;
+    return BootAction::None;
   filter.stableHigh = rawHigh;
   if (!filter.stableHigh) {
     if (filter.armed) filter.pressedAt = nowMs;
-    return false;
+    return BootAction::None;
   }
+  const uint64_t duration = nowMs - filter.pressedAt;
   const bool pressed = filter.armed && filter.pressedAt != 0 &&
-                       nowMs - filter.pressedAt >= kBootPressMinMs;
+                       duration >= kBootPressMinMs;
   filter.pressedAt = 0;
   filter.armed = true;
-  return pressed;
+  if (!pressed) return BootAction::None;
+  return duration >= kBootCalibrationHoldMs ? BootAction::Calibrate : BootAction::Rotate;
 }
 
 }  // namespace display

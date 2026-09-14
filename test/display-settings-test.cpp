@@ -2,6 +2,7 @@
 #include <iostream>
 #include <stdexcept>
 #include "../include/display-settings.h"
+#include "../include/touch-calibration.h"
 
 namespace {
 void check(bool condition, const char* message) {
@@ -74,16 +75,61 @@ int main() {
     check(roundTrip.x == 123 && roundTrip.y == 45, "orient round trip");
     BootFilter boot;
     bootInit(boot, true, 0);
-    check(!bootUpdate(boot, false, 10), "debounce press");
-    check(!bootUpdate(boot, false, 45), "stable press no release");
-    check(!bootUpdate(boot, true, 120), "debounce release");
-    check(bootUpdate(boot, true, 155), "single press flips");
-    check(!bootUpdate(boot, true, 200), "no repeat without press");
+    check(bootUpdate(boot, false, 10) == BootAction::None, "debounce press");
+    check(bootUpdate(boot, false, 45) == BootAction::None, "stable press no release");
+    check(bootUpdate(boot, true, 120) == BootAction::None, "debounce release");
+    check(bootUpdate(boot, true, 155) == BootAction::Rotate, "single press flips");
+    check(bootUpdate(boot, true, 200) == BootAction::None, "no repeat without press");
     bootInit(boot, true, 1000);
-    check(!bootUpdate(boot, false, 1005), "short press change");
-    check(!bootUpdate(boot, false, 1040), "short press stable");
-    check(!bootUpdate(boot, true, 1045), "short release change");
-    check(!bootUpdate(boot, true, 1080), "short release ignored");
+    check(bootUpdate(boot, false, 1005) == BootAction::None, "short press change");
+    check(bootUpdate(boot, false, 1040) == BootAction::None, "short press stable");
+    check(bootUpdate(boot, true, 1045) == BootAction::None, "short release change");
+    check(bootUpdate(boot, true, 1080) == BootAction::None, "short release ignored");
+    bootInit(boot, true, 2000);
+    check(bootUpdate(boot, false, 2010) == BootAction::None, "calibration press bounce");
+    check(bootUpdate(boot, false, 2050) == BootAction::None, "calibration press stable");
+    check(bootUpdate(boot, true, 3590) == BootAction::None, "calibration release bounce");
+    check(bootUpdate(boot, true, 3630) == BootAction::Calibrate, "long press calibrates");
+    check(bootUpdate(boot, true, 3660) == BootAction::None, "calibration once");
+    povo::touch::Calibration touch;
+    check(povo::touch::valid(touch), "default touch calibration");
+    check(povo::touch::thresholdFor(30) == 15, "light stylus threshold");
+    check(povo::touch::thresholdFor(10) == 12, "minimum threshold");
+    check(povo::touch::thresholdFor(600) == 120, "maximum threshold");
+    check(povo::touch::mapAxis(200, 200, 3700, 24, 295, 319) == 24,
+          "touch left anchor");
+    check(povo::touch::mapAxis(3700, 200, 3700, 24, 295, 319) == 295,
+          "touch right anchor");
+    check(povo::touch::mapAxis(3700, 3700, 200, 24, 295, 319) == 24,
+          "reversed touch axis");
+    touch.right = touch.left + 100;
+    check(!povo::touch::valid(touch), "reject collapsed touch axis");
+    touch = {};
+    const auto stored = povo::touch::encode(touch);
+    povo::touch::Calibration restored;
+    check(povo::touch::decode(stored, restored), "calibration round trip");
+    check(restored.left == touch.left && restored.pressure == touch.pressure,
+          "calibration values retained");
+    auto damaged = stored;
+    damaged.values[4] = 0;
+    check(!povo::touch::decode(damaged, restored), "reject damaged calibration");
+    damaged = stored;
+    damaged.version = 2;
+    check(!povo::touch::decode(damaged, restored), "reject unknown calibration version");
+    povo::touch::SampleFilter filter;
+    povo::touch::Sample stable;
+    check(!filter.push({100, 100}, stable), "first touch sample pending");
+    check(!filter.push({102, 101}, stable), "second touch sample pending");
+    check(filter.push({101, 100}, stable) && stable.x == 101,
+          "three nearby samples produce contact");
+    check(filter.current(stable), "contact held after first delivery");
+    filter.reset();
+    check(!filter.current(stable), "release clears contact");
+    check(!filter.push({10, 10}, stable), "noise first sample");
+    check(!filter.push({200, 200}, stable), "jump restarts filter");
+    check(!filter.push({202, 200}, stable), "second post-jump sample");
+    check(filter.push({201, 201}, stable) && stable.x == 201,
+          "stable contact after noise");
     std::cout << "display settings timeouts, tabs, power, rotation and boot passed\n";
     return 0;
   } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }

@@ -20,7 +20,9 @@ int main(int argc, char** argv) {
       text::setupTitle, text::setupWifi, text::setupOpen, text::portalError, text::storageError,
       text::tabStatus, text::tabSleep, text::sleepTitle, text::sleepNow, text::sleepSelect,
       text::sleepPrev, text::sleepNext, text::rotateHint, text::sleepNone,
-      text::sleepSecUnit, text::sleepMinUnit, text::sleepHourUnit};
+      text::sleepSecUnit, text::sleepMinUnit, text::sleepHourUnit,
+      text::touchStep1, text::touchStep2, text::touchInstruction,
+      text::touchTimeout, text::touchInvalid, text::touchSaveError};
     for (const char* message : messages) { checkLine(message); drawDisplay(nullptr, 0, message); }
     for (const char* source : text::sources) checkLine(std::string(text::expiry) + "12/31 23:59 JST [" + source + "]");
     char buffer[96];
@@ -49,6 +51,10 @@ int main(int argc, char** argv) {
       if (ui::missing) throw std::runtime_error("unknown glyph in sleep settings");
     }
     if (setSleepTimeout(12345U)) throw std::runtime_error("invalid timeout accepted");
+    drawCalibrationStep(text::touchStep1, touch::kTargetLeft, touch::kTargetTop);
+    if (ui::missing) throw std::runtime_error("unknown glyph in touch calibration");
+    drawCalibrationStep(text::touchStep2, touch::kTargetRight, touch::kTargetBottom);
+    if (ui::missing) throw std::runtime_error("unknown glyph in touch calibration step 2");
     toggleDisplayRotation();
     setDisplayPage(povo::display::Page::Sleep);
     drawDisplay(&s, 120000, nullptr);

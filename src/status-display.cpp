@@ -3,6 +3,7 @@
 #include <time.h>
 #include "status-display.h"
 #include "display-settings.h"
+#include "touch-calibration.h"
 #include "ui-text.h"
 #include "japanese-font.h"
 #if __has_include("device-config.h")
@@ -13,6 +14,8 @@
 #ifdef ARDUINO
 #include <Preferences.h>
 #include <SPI.h>
+#include <esp_timer.h>
+#include "sensitive-xpt2046.h"
 #endif
 
 namespace {
@@ -23,9 +26,6 @@ constexpr uint16_t bg = 0x0841, fg = 0xFFFF, accent = 0xFFE0, panel = 0x18E3;
 constexpr int kTouchClockPin = 25, kTouchMisoPin = 39, kTouchMosiPin = 32,
               kTouchChipSelectPin = 33, kTouchIrqPin = 36;
 constexpr int kBootButtonPin = 0;
-constexpr int kTouchPressureMinimum = 120;
-constexpr int kTouchRawLeft = 200, kTouchRawRight = 3700, kTouchRawTop = 240,
-              kTouchRawBottom = 3800;
 // ILI9341命令。TFT_eSPIの内部定義に依存しない。
 constexpr uint8_t kDispoff = 0x28, kDispon = 0x29, kSlpin = 0x10, kSlpout = 0x11;
 constexpr uint32_t kTapMinIntervalMs = 350;
@@ -48,10 +48,14 @@ struct State {
   uint64_t cachedElapsedMs = 0;
   char cachedError[128] = {};
   bool haveError = false;
+  povo::touch::Calibration calibration;
+  povo::touch::SampleFilter touchFilter;
 };
 State state;
 #ifdef ARDUINO
 SPIClass touchBus(VSPI);
+SensitiveXpt2046 touch(kTouchChipSelectPin, kTouchIrqPin,
+                       povo::touch::kDefaultPressure);
 #endif
 
 void lineAt(int x, int y, const char* value, uint16_t color = fg) {
@@ -104,7 +108,6 @@ void applyBacklight() {
 void setAwakeLocked(bool awake) {
   if (state.awake == awake) { applyBacklight(); return; }
   state.awake = awake;
-  state.wasTouched = false;
   if (!awake) {
     applyBacklight();
     tft.writecommand(kDispoff);
@@ -121,11 +124,17 @@ void setAwakeLocked(bool awake) {
 void loadSettings() {
   state.timeoutIndex = 0;
   state.inverted = false;
+  state.calibration = {};
 #ifdef ARDUINO
   Preferences prefs;
   if (!prefs.begin(kSettingsStore, true)) return;
   const uint32_t seconds = prefs.getUInt("sleep_sec", 0);
   state.inverted = prefs.getBool("inverted", false);
+  povo::touch::StoredCalibration stored = {};
+  if (prefs.getBytesLength("touch_calib") == sizeof(stored) &&
+      prefs.getBytes("touch_calib", &stored, sizeof(stored)) == sizeof(stored)) {
+    povo::touch::decode(stored, state.calibration);
+  }
   prefs.end();
   for (size_t i = 0; i < povo::display::kSleepTimeoutCount; ++i)
     if (povo::display::kSleepTimeoutOptions[i] == seconds) { state.timeoutIndex = i; break; }
@@ -135,12 +144,23 @@ void saveSettings() {
 #ifdef ARDUINO
   Preferences prefs;
   if (!prefs.begin(kSettingsStore, false)) return;
-  prefs.putUInt("version", 1);
+  prefs.putUInt("version", 2);
   prefs.putUInt("sleep_sec", povo::display::timeoutForIndex(state.timeoutIndex));
   prefs.putBool("inverted", state.inverted);
   prefs.end();
 #endif
 }
+#ifdef ARDUINO
+bool saveTouchCalibration() {
+  Preferences prefs;
+  if (!prefs.begin(kSettingsStore, false)) return false;
+  const auto stored = povo::touch::encode(state.calibration);
+  const bool saved = prefs.putBytes("touch_calib", &stored, sizeof(stored)) ==
+                     sizeof(stored);
+  prefs.end();
+  return saved;
+}
+#endif
 void applyRotation() {
   tft.setRotation(state.inverted ? povo::display::kRotationInverted
                                  : povo::display::kRotationNormal);
@@ -213,62 +233,106 @@ void redrawFromCache() {
   drawTabs();
 }
 #ifdef ARDUINO
-int16_t clampAxis(int16_t value, int16_t maximum) {
-  if (value < 0) return 0;
-  if (value > maximum) return maximum;
-  return value;
+bool readTouchHardware(povo::display::Point& out) {
+  if (!touch.tirqTouched()) { state.touchFilter.reset(); return false; }
+  const SensitiveTouchPoint point = touch.getPoint();
+  povo::touch::Sample stable;
+  if (point.z < state.calibration.pressure) {
+    if (!state.touchFilter.current(stable)) return false;
+    out = {stable.x, stable.y};
+    return true;
+  }
+  povo::display::Point mapped{
+      povo::touch::mapAxis(point.x, state.calibration.left, state.calibration.right,
+                           povo::touch::kTargetLeft, povo::touch::kTargetRight,
+                           povo::display::kScreenW - 1),
+      povo::touch::mapAxis(point.y, state.calibration.top, state.calibration.bottom,
+                           povo::touch::kTargetTop, povo::touch::kTargetBottom,
+                           povo::display::kScreenH - 1)};
+  mapped = povo::display::orientPoint(mapped, state.inverted);
+  if (!state.touchFilter.push({static_cast<int16_t>(mapped.x),
+                               static_cast<int16_t>(mapped.y)}, stable)) return false;
+  out = {stable.x, stable.y};
+  return true;
 }
-int16_t mapRaw(int16_t raw, int16_t rawStart, int16_t rawEnd, int16_t screenMaximum) {
-  const long denominator = static_cast<long>(rawEnd) - rawStart;
-  if (denominator > -100 && denominator < 100) return 0;
-  const long value =
-      (static_cast<long>(raw) - rawStart) * screenMaximum / denominator;
-  return clampAxis(static_cast<int16_t>(value), screenMaximum);
-}
-int16_t bestTwoAverage(int16_t first, int16_t second, int16_t third) {
-  const int16_t firstSecond = abs(first - second);
-  const int16_t firstThird = abs(first - third);
-  const int16_t thirdSecond = abs(third - second);
-  if (firstSecond <= firstThird && firstSecond <= thirdSecond)
-    return static_cast<int16_t>((first + second) / 2);
-  if (firstThird <= firstSecond && firstThird <= thirdSecond)
-    return static_cast<int16_t>((first + third) / 2);
-  return static_cast<int16_t>((second + third) / 2);
-}
-// XPT2046の読み取りはコントローラーのデータシートに従う。複数サンプルの
-// 中央寄せは抵抗膜タッチの定番手法。
-bool readRawTouch(int16_t& rawX, int16_t& rawY, int16_t& pressure) {
-  static const SPISettings settings(2000000, MSBFIRST, SPI_MODE0);
-  touchBus.beginTransaction(settings);
-  digitalWrite(kTouchChipSelectPin, LOW);
-  touchBus.transfer(0xB1);
-  const int16_t z1 = static_cast<int16_t>(touchBus.transfer16(0xC1) >> 3);
-  const int16_t z2 = static_cast<int16_t>(touchBus.transfer16(0x91) >> 3);
-  pressure = static_cast<int16_t>(z1 + 4095 - z2);
-  int16_t x[3] = {}, y[3] = {};
-  if (pressure >= kTouchPressureMinimum) {
-    touchBus.transfer16(0x91);
-    for (int i = 0; i < 3; ++i) {
-      x[i] = static_cast<int16_t>(touchBus.transfer16(0xD1) >> 3);
-      y[i] = static_cast<int16_t>(touchBus.transfer16(0x91) >> 3);
+
+bool captureCalibrationPoint(int16_t& rawX, int16_t& rawY, int16_t& pressure) {
+  const uint32_t start = millis();
+  while (static_cast<uint32_t>(millis() - start) < 15000) {
+    if (!touch.tirqTouched()) { delay(10); continue; }
+    int32_t sumX = 0, sumY = 0;
+    int16_t count = 0, minimum = 32767;
+    while (touch.tirqTouched() && count < 12 &&
+           static_cast<uint32_t>(millis() - start) < 15000) {
+      const SensitiveTouchPoint point = touch.getPoint();
+      if (point.z >= povo::touch::kCapturePressure &&
+          point.x >= 0 && point.x <= 4095 &&
+          point.y >= 0 && point.y <= 4095) {
+        sumX += point.x; sumY += point.y;
+        if (point.z < minimum) minimum = point.z;
+        ++count;
+      }
+      delay(12);
+    }
+    while (touch.tirqTouched() &&
+           static_cast<uint32_t>(millis() - start) < 15000) {
+      touch.getPoint(); delay(10);
+    }
+    if (count >= 4) {
+      rawX = static_cast<int16_t>(sumX / count);
+      rawY = static_cast<int16_t>(sumY / count);
+      pressure = minimum;
+      return true;
     }
   }
-  digitalWrite(kTouchChipSelectPin, HIGH);
-  touchBus.endTransaction();
-  if (pressure < kTouchPressureMinimum) return false;
-  rawX = bestTwoAverage(x[0], x[1], x[2]);
-  rawY = bestTwoAverage(y[0], y[1], y[2]);
-  return true;
+  return false;
 }
-bool readTouchHardware(povo::display::Point& out) {
-  if (digitalRead(kTouchIrqPin) != LOW) return false;
-  int16_t rawX = 0, rawY = 0, pressure = 0;
-  if (!readRawTouch(rawX, rawY, pressure)) return false;
-  povo::display::Point mapped{
-      mapRaw(rawX, kTouchRawLeft, kTouchRawRight, povo::display::kScreenW - 1),
-      mapRaw(rawY, kTouchRawTop, kTouchRawBottom, povo::display::kScreenH - 1)};
-  out = povo::display::orientPoint(mapped, state.inverted);
-  return true;
+#endif
+
+void drawCalibrationStep(const char* title, int x, int y) {
+  tft.fillScreen(bg);
+  line(8, title, accent);
+  line(40, povo::text::touchInstruction);
+  tft.fillRect(x - 10, y, 21, 1, accent);
+  tft.fillRect(x, y - 10, 1, 21, accent);
+}
+
+#ifdef ARDUINO
+void calibrateTouch() {
+  setAwakeLocked(true);
+  touch.setPressureThreshold(povo::touch::kCapturePressure);
+  tft.setRotation(povo::display::kRotationNormal);
+  int16_t left = 0, top = 0, right = 0, bottom = 0, firstZ = 0, secondZ = 0;
+  drawCalibrationStep(povo::text::touchStep1, povo::touch::kTargetLeft,
+                      povo::touch::kTargetTop);
+  const bool first = captureCalibrationPoint(left, top, firstZ);
+  if (first) {
+    drawCalibrationStep(povo::text::touchStep2, povo::touch::kTargetRight,
+                        povo::touch::kTargetBottom);
+  }
+  const bool second = first && captureCalibrationPoint(right, bottom, secondZ);
+  if (second) {
+    povo::touch::Calibration candidate{left, right, top, bottom,
+        povo::touch::thresholdFor(firstZ < secondZ ? firstZ : secondZ)};
+    if (povo::touch::valid(candidate)) {
+      const auto previous = state.calibration;
+      state.calibration = candidate;
+      if (!saveTouchCalibration()) {
+        state.calibration = previous;
+        tft.fillScreen(bg); line(60, povo::text::touchSaveError, accent); delay(1800);
+      }
+    } else {
+      tft.fillScreen(bg); line(60, povo::text::touchInvalid, accent); delay(1800);
+    }
+  } else {
+    tft.fillScreen(bg); line(60, povo::text::touchTimeout, accent); delay(1800);
+  }
+  applyRotation();
+  touch.setPressureThreshold(state.calibration.pressure);
+  state.touchFilter.reset();
+  state.wasTouched = false;
+  state.lastActivityMs = static_cast<uint64_t>(esp_timer_get_time()) / 1000ULL;
+  redrawFromCache();
 }
 #endif
 }
@@ -282,10 +346,10 @@ void beginDisplay() {
   applyBacklight();
 #ifdef ARDUINO
   pinMode(kBootButtonPin, INPUT_PULLUP);
-  pinMode(kTouchChipSelectPin, OUTPUT);
-  digitalWrite(kTouchChipSelectPin, HIGH);
-  pinMode(kTouchIrqPin, INPUT_PULLUP);
   touchBus.begin(kTouchClockPin, kTouchMisoPin, kTouchMosiPin, kTouchChipSelectPin);
+  touch.begin(touchBus);
+  touch.setRotation(1);
+  touch.setPressureThreshold(state.calibration.pressure);
 #endif
 }
 void drawDisplay(const povo::Status* status, uint64_t elapsedMs, const char* error) {
@@ -316,14 +380,20 @@ void pollDisplayInput(uint64_t nowMs) {
   if (!state.bootReady) {
     povo::display::bootInit(state.boot, rawHigh, nowMs);
     state.bootReady = true;
-  } else if (povo::display::bootUpdate(state.boot, rawHigh, nowMs)) {
-    state.inverted = !state.inverted;
-    saveSettings();
-    applyRotation();
-    state.lastActivityMs = nowMs;
-    if (!state.awake) setAwakeLocked(true);
-    redrawFromCache();
-    return;
+  } else {
+    const auto action = povo::display::bootUpdate(state.boot, rawHigh, nowMs);
+    if (action != povo::display::BootAction::None) {
+      state.lastActivityMs = nowMs;
+      if (action == povo::display::BootAction::Calibrate) calibrateTouch();
+      else {
+        state.inverted = !state.inverted;
+        saveSettings();
+        applyRotation();
+        if (!state.awake) setAwakeLocked(true);
+        redrawFromCache();
+      }
+      return;
+    }
   }
   povo::display::Point point;
   const bool touched = readTouchHardware(point);
@@ -333,7 +403,11 @@ void pollDisplayInput(uint64_t nowMs) {
   if (!tap) return;
   state.lastTapMs = nowMs;
   state.lastActivityMs = nowMs;
-  if (!state.awake) { setAwakeLocked(true); redrawFromCache(); return; }
+  if (!state.awake) {
+    setAwakeLocked(true);
+    state.wasTouched = true; // 復帰に使った接触は離すまで操作へ流さない。
+    redrawFromCache(); return;
+  }
   Page tab;
   if (povo::display::tabForTouch(point.x, point.y, tab)) {
     if (tab != state.page) {
