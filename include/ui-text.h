@@ -42,4 +42,5 @@ constexpr const char* touchInstruction = "十字をペンで押して離す";
 constexpr const char* touchTimeout = "反応なし・タッチ面を確認";
 constexpr const char* touchInvalid = "調整失敗・もう一度試す";
 constexpr const char* touchSaveError = "保存失敗・再調整して下さい";
+constexpr const char* displayMemoryError = "表示メモリ不足・再起動";
 } }

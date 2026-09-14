@@ -22,7 +22,8 @@ int main(int argc, char** argv) {
       text::sleepPrev, text::sleepNext, text::rotateHint, text::sleepNone,
       text::sleepSecUnit, text::sleepMinUnit, text::sleepHourUnit,
       text::touchStep1, text::touchStep2, text::touchInstruction,
-      text::touchTimeout, text::touchInvalid, text::touchSaveError};
+      text::touchTimeout, text::touchInvalid, text::touchSaveError,
+      text::displayMemoryError};
     for (const char* message : messages) { checkLine(message); drawDisplay(nullptr, 0, message); }
     for (const char* source : text::sources) checkLine(std::string(text::expiry) + "12/31 23:59 JST [" + source + "]");
     char buffer[96];

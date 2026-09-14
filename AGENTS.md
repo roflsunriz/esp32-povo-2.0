@@ -42,6 +42,7 @@ Get-Content -Raw -LiteralPath .\COMMON-AGENTS.md
 - 起動後BOOT長押しで2点の位置・押圧感度を調整する。NVS `povo-display` の `touch_calib` 単一blobへバージョン・検証値付きで保存し、旧版は既定値へ安全にフォールバックする。押下取得・保存に失敗した場合は旧値を維持する。ペン自体が抵抗膜へ接触できずPENIRQが出ない場合はソフトウェア閾値では解決できない（`src/status-display.cpp`、`include/touch-calibration.h`、`verification.md`）。
 - BOOTボタンはGPIO0（INPUT_PULLUP）。30msチャタリング除去・50ms以上押して離したら1回押しで上下反転（rotation 1⇔3、タッチ座標も反転）。
 - 消灯設定32件（なし・15秒・30秒・1分・2分・5分・10分・30分・1時間・2〜24時間毎時）は `include/display-settings.h` に純粋ロジックとして集約し `test/display-settings-test.cpp` で検証する。表示文言の正本は `include/ui-text.h`、字形は `scripts/generate-font.py` で再生成する。
+- 2026-09-14、通常画面は320×240の8-bit Spriteを16行ずつハッシュ比較し、変化した帯だけLCDへ転送する（`include/display-diff.h`、`src/status-display.cpp`）。回転、液晶復帰、ログイン設定画面、タッチ校正の後は全帯を再転送する。メモリ不足時は直接描画へフォールバックし画面へ原因を表示する。ホストテストとビルド済み、実機のちらつき・TLS併用メモリは未確認。
 - 設定と画面向きはNVS `povo-display`（sleep_sec・inverted）に保存する。消灯中も取得は継続し描画だけ休止する。設定用ポータル表示中はタブ・消灯を適用しない。
 - 2026-09-07はホスト6テスト・PIOビルド・Chrome設定画面テストまで成功。タッチ・消灯・復帰・反転の実機確認は追加基板待ちで未実施（`verification.md` の残り7番）。
 

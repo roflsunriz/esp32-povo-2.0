@@ -3,6 +3,7 @@
 #include <time.h>
 #include "status-display.h"
 #include "display-settings.h"
+#include "display-diff.h"
 #include "touch-calibration.h"
 #include "ui-text.h"
 #include "japanese-font.h"
@@ -21,6 +22,10 @@
 namespace {
 using povo::display::Page;
 TFT_eSPI tft;
+TFT_eSprite canvas(&tft);
+TFT_eSPI* drawing = &tft;
+display_diff::Bands bandDiff;
+bool canvasReady = false;
 constexpr uint16_t bg = 0x0841, fg = 0xFFFF, accent = 0xFFE0, panel = 0x18E3;
 // XPT2046配線とBOOTボタンはESP32-2432S028Rの代表値。TFTとは別バス(VSPI)。
 constexpr int kTouchClockPin = 25, kTouchMisoPin = 39, kTouchMosiPin = 32,
@@ -59,13 +64,13 @@ SensitiveXpt2046 touch(kTouchChipSelectPin, kTouchIrqPin,
 #endif
 
 void lineAt(int x, int y, const char* value, uint16_t color = fg) {
-  tft.setTextColor(color, bg);
+  drawing->setTextColor(color, bg);
   const uint8_t* p = reinterpret_cast<const uint8_t*>(value);
   while (*p && x < 312) {
     uint16_t c = *p++;
     if (c < 128) {
       if (c < 32 || c > 126 || x + 8 > 312) break;
-      tft.drawBitmap(x, y, povo::kAsciiGlyphs[c - 32], 8, 16, color);
+      drawing->drawBitmap(x, y, povo::kAsciiGlyphs[c - 32], 8, 16, color);
       x += 8; continue;
     }
     if ((c & 0xE0) == 0xC0 && *p) { c = ((c & 31) << 6) | (*p++ & 63); }
@@ -75,9 +80,9 @@ void lineAt(int x, int y, const char* value, uint16_t color = fg) {
     if (x + 16 > 312) break;
     bool found = false;
     for (const auto& glyph : povo::kJapaneseGlyphs) if (glyph.codepoint == c) {
-      tft.drawBitmap(x, y, glyph.bitmap, 16, 16, color); found = true; break;
+      drawing->drawBitmap(x, y, glyph.bitmap, 16, 16, color); found = true; break;
     }
-    if (!found) tft.drawRect(x, y, 14, 14, color);
+    if (!found) drawing->drawRect(x, y, 14, 14, color);
     x += 16;
   }
 }
@@ -119,6 +124,7 @@ void setAwakeLocked(bool awake) {
   delay(120);
 #endif
   tft.writecommand(kDispon);
+  bandDiff.invalidate();
   applyBacklight();
 }
 void loadSettings() {
@@ -164,12 +170,13 @@ bool saveTouchCalibration() {
 void applyRotation() {
   tft.setRotation(state.inverted ? povo::display::kRotationInverted
                                  : povo::display::kRotationNormal);
+  bandDiff.invalidate();
 }
 void drawTabs() {
   using namespace povo::display;
   const bool statusSelected = state.page == Page::Status;
-  tft.fillRect(0, kTabY, kScreenW / 2, kTabH, statusSelected ? accent : panel);
-  tft.fillRect(kScreenW / 2, kTabY, kScreenW - kScreenW / 2, kTabH,
+  drawing->fillRect(0, kTabY, kScreenW / 2, kTabH, statusSelected ? accent : panel);
+  drawing->fillRect(kScreenW / 2, kTabY, kScreenW - kScreenW / 2, kTabH,
                statusSelected ? panel : accent);
   lineAt(64, kTabY + 4, povo::text::tabStatus, statusSelected ? bg : fg);
   lineAt(208, kTabY + 4, povo::text::tabSleep, statusSelected ? fg : bg);
@@ -177,7 +184,12 @@ void drawTabs() {
 void drawStatusPage(const povo::Status* status, uint64_t elapsedMs, const char* error) {
   using namespace povo;
   line(6, text::title, accent);
-  if (!status) { line(50, text::noStatus); if (error) line(88, error, accent); return; }
+  if (!status) {
+    line(50, text::noStatus);
+    if (error) line(88, error, accent);
+    if (!canvasReady) line(186, text::displayMemoryError, accent);
+    return;
+  }
   const View v = derive(*status, elapsedMs);
   char buffer[96];
   if (!v.remainingKnown) line(34, text::unknown);
@@ -193,6 +205,7 @@ void drawStatusPage(const povo::Status* status, uint64_t elapsedMs, const char* 
   line(142, text::precision);
   snprintf(buffer, sizeof(buffer), text::sync, (unsigned long long)(v.syncAgeMs / 60000)); line(164, buffer);
   if (error) line(186, error, accent);
+  else if (!canvasReady) line(186, text::displayMemoryError, accent);
   else if (v.stale) line(186, text::stale, accent);
   else line(186, text::rotateHint);
 }
@@ -214,23 +227,38 @@ void drawSleepPage() {
       if (index >= kSleepTimeoutCount) continue;
       const int left = kGridColX[col], top = kGridTop + row * kGridRowH;
       const bool selected = index == state.timeoutIndex;
-      tft.fillRect(left, top, kGridCellW, kGridCellH, selected ? accent : panel);
+      drawing->fillRect(left, top, kGridCellW, kGridCellH, selected ? accent : panel);
       formatTimeout(timeoutForIndex(index), cell, sizeof(cell));
       lineAt(left + 6, top + 4, cell, selected ? bg : fg);
     }
   }
-  tft.fillRect(4, kNavY, 152, kNavH, panel);
-  tft.fillRect(164, kNavY, 152, kNavH, panel);
+  drawing->fillRect(4, kNavY, 152, kNavH, panel);
+  drawing->fillRect(164, kNavY, 152, kNavH, panel);
   lineAt(64, kNavY + 2, povo::text::sleepPrev, fg);
   lineAt(224, kNavY + 2, povo::text::sleepNext, fg);
 }
 void redrawFromCache() {
   if (!state.awake) return;
-  tft.fillScreen(bg);
+  drawing = canvasReady ? static_cast<TFT_eSPI*>(&canvas) : &tft;
+  drawing->fillScreen(bg);
   if (state.page == Page::Sleep) drawSleepPage();
   else drawStatusPage(state.haveCached ? &state.cachedStatus : nullptr,
                       state.cachedElapsedMs, state.haveError ? state.cachedError : nullptr);
   drawTabs();
+  if (canvasReady) {
+    const uint16_t changed = bandDiff.update(
+        static_cast<const uint8_t*>(canvas.getPointer()));
+    if (!display_diff::eachRun(changed, [](size_t top, size_t height) {
+          return canvas.pushSprite(0, static_cast<int32_t>(top), 0,
+                                   static_cast<int32_t>(top),
+                                   static_cast<int32_t>(display_diff::kWidth),
+                                   static_cast<int32_t>(height));
+        })) {
+      canvas.pushSprite(0, 0);
+      bandDiff.invalidate();
+    }
+  }
+  drawing = &tft;
 }
 #ifdef ARDUINO
 bool readTouchHardware(povo::display::Point& out) {
@@ -290,6 +318,8 @@ bool captureCalibrationPoint(int16_t& rawX, int16_t& rawY, int16_t& pressure) {
 #endif
 
 void drawCalibrationStep(const char* title, int x, int y) {
+  drawing = &tft;
+  bandDiff.invalidate();
   tft.fillScreen(bg);
   line(8, title, accent);
   line(40, povo::text::touchInstruction);
@@ -341,6 +371,9 @@ void beginDisplay() {
   state.sleepPage = povo::display::sleepPageForIndex(state.timeoutIndex);
   tft.init();
   applyRotation();
+  canvas.setColorDepth(8);
+  canvasReady = canvas.createSprite(povo::display::kScreenW,
+                                     povo::display::kScreenH) != nullptr;
   tft.setTextColor(fg, bg);
   ledcAttach(TFT_BL, 5000, 8);
   applyBacklight();
@@ -365,6 +398,8 @@ void drawDisplay(const povo::Status* status, uint64_t elapsedMs, const char* err
 }
 void drawSetup(const char* ssid, const char* password) {
   setAwakeLocked(true);
+  drawing = &tft;
+  bandDiff.invalidate();
   applyBacklight();
   tft.fillScreen(bg);
   line(6, povo::text::setupTitle, accent);

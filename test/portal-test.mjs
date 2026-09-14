@@ -55,5 +55,6 @@ try {
   console.log('Portal validation, OTP, TTL, resend failure, success, network recovery and 3 viewports passed');
 } finally {
   socket?.close();
-  if(process.platform==='win32')spawnSync('taskkill',['/PID',String(chrome.pid),'/T','/F'],{stdio:'ignore',windowsHide:true});else chrome.kill();
+  chrome.kill();
+  if(process.platform==='win32')spawnSync('taskkill',['/PID',String(chrome.pid),'/T','/F'],{stdio:'ignore',windowsHide:true});
 }

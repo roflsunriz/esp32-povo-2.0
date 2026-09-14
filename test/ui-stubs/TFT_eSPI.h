@@ -47,3 +47,18 @@ class TFT_eSPI {
   }
   void drawRect(int, int, int, int, uint16_t) { ++ui::missing; ++ui::glyphCount; }
 };
+
+class TFT_eSprite : public TFT_eSPI {
+ public:
+  explicit TFT_eSprite(TFT_eSPI*) {}
+  void setColorDepth(int) {}
+  void* createSprite(int width, int height) {
+    if (width != 320 || height != 240) throw std::runtime_error("wrong sprite size");
+    return bytes_.data();
+  }
+  void* getPointer() { return bytes_.data(); }
+  bool pushSprite(int, int, int, int, int, int) { return true; }
+  void pushSprite(int, int) {}
+ private:
+  std::array<uint8_t, 320 * 240> bytes_{};
+};

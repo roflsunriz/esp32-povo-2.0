@@ -1,8 +1,10 @@
+#include <array>
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include "../include/display-settings.h"
 #include "../include/touch-calibration.h"
+#include "../include/display-diff.h"
 
 namespace {
 void check(bool condition, const char* message) {
@@ -130,6 +132,24 @@ int main() {
     check(!filter.push({202, 200}, stable), "second post-jump sample");
     check(filter.push({201, 201}, stable) && stable.x == 201,
           "stable contact after noise");
+    std::array<uint8_t, display_diff::kWidth * display_diff::kHeight> frame{};
+    display_diff::Bands diff;
+    check(diff.update(frame.data()) == 0x7FFF, "first frame updates all bands");
+    check(diff.update(frame.data()) == 0, "identical frame skips transfer");
+    frame[17 * display_diff::kWidth + 5] = 1;
+    check(diff.update(frame.data()) == (1U << 1), "changed second band only");
+    frame[239 * display_diff::kWidth + 319] = 2;
+    check(diff.update(frame.data()) == (1U << 14), "changed last band only");
+    diff.invalidate();
+    check(diff.update(frame.data()) == 0x7FFF, "rotation repaints full frame");
+    size_t runs = 0;
+    check(display_diff::eachRun(static_cast<uint16_t>((1U << 1) | (1U << 2) |
+                                                    (1U << 4)),
+        [&](size_t top, size_t height) {
+          if (runs == 0) check(top == 16 && height == 32, "merge adjacent bands");
+          if (runs == 1) check(top == 64 && height == 16, "separate distant band");
+          ++runs; return true;
+        }) && runs == 2, "changed runs transferred once");
     std::cout << "display settings timeouts, tabs, power, rotation and boot passed\n";
     return 0;
   } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
