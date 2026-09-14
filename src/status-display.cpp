@@ -240,7 +240,7 @@ void drawSleepPage() {
 void redrawFromCache() {
   if (!state.awake) return;
   drawing = canvasReady ? static_cast<TFT_eSPI*>(&canvas) : &tft;
-  drawing->fillScreen(bg);
+  display_diff::clearFrame(*drawing, bg);
   if (state.page == Page::Sleep) drawSleepPage();
   else drawStatusPage(state.haveCached ? &state.cachedStatus : nullptr,
                       state.cachedElapsedMs, state.haveError ? state.cachedError : nullptr);

@@ -52,6 +52,15 @@ int main(int argc, char** argv) {
       if (ui::missing) throw std::runtime_error("unknown glyph in sleep settings");
     }
     if (setSleepTimeout(12345U)) throw std::runtime_error("invalid timeout accepted");
+    setSleepTimeout(30U);
+    setDisplayPage(povo::display::Page::Sleep);
+    drawDisplay(&s, 120000, nullptr);
+    if (ui::pixels[70 * 320 + 270] != accent)
+      throw std::runtime_error("selected right-side setting was not drawn");
+    setDisplayPage(povo::display::Page::Status);
+    drawDisplay(&s, 120000, nullptr);
+    if (ui::pixels[70 * 320 + 270] != bg)
+      throw std::runtime_error("right-side setting remains after tab switch");
     drawCalibrationStep(text::touchStep1, touch::kTargetLeft, touch::kTargetTop);
     if (ui::missing) throw std::runtime_error("unknown glyph in touch calibration");
     drawCalibrationStep(text::touchStep2, touch::kTargetRight, touch::kTargetBottom);

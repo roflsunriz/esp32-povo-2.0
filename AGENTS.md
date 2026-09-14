@@ -31,7 +31,7 @@ Get-Content -Raw -LiteralPath .\COMMON-AGENTS.md
 - 配布物は `.github/workflows/release.yml` が `git archive` で作るソースZIPとSHA-256一覧であり、個人設定入りファームウェアではない。依存更新も配布ソースの変更になる。版はCHANGELOGの該当節と `vX.Y.Z` タグで管理し、`scripts/release-notes.py` はリポジトリ直下で実行する。
 
 ## 実機検証の所見（2026-09-06〜2026-09-14）
-- 2026-09-14の現在接続ではCOM3のCodex MicroはUSB位置`1-8.1`、ユーザーがpovo専用基板と説明したCOM4は別位置`1-7`のCH340。COM4へのesptool自動リセット接続は`Wrong boot mode detected (0x13)`、手動モード待ちの`no-reset`接続は`No serial data received`で停止し、まだ読み取り・書き込みをしていない。以後もCOM3へは接続せず、COM4を手動BOOT+RSTでdownload modeに入れ、全flash退避・照合後に進める。ユーザーは現行`include/device-config.h`のSSIDを実運用APとして確認し、ローカルビルドにも同設定が含まれることを値を表示せず確認した。
+- 2026-09-14の現在接続ではCOM3のCodex MicroはUSB位置`1-8.1`、ユーザーがpovo専用基板と説明したCOM4は別位置`1-7`のCH340。COM4へのesptool自動リセット接続は`Wrong boot mode detected (0x13)`で失敗し、手動BOOT保持→RST短押し→BOOT解放でdownload modeに入った。全flash 4MBを`build/backup-povo-com4-20260914/`へ退避し`verify-flash`で実機と一致、SHA-256を同ディレクトリに保存した。既存パーティション表が新ビルドと一致し、旧アプリがpovoと確認したため、COM4の0x10000アプリ領域だけ更新して`verify-flash`で一致を確認した。COM3は触っていない。`--after no-reset-stub`後の`--before no-reset-no-sync`で書き込み後の照合へ接続できた。ユーザーが実機でBOOT長押し2点校正とペンのタブ切替、RST後の反応を報告した。v0.5.0のタブ切替で画面右側の残像が発生。TFT_eSPI基底の`fillScreen`がSprite幅240ピクセルしか消さないため、v0.5.1では320×240全体の`fillRect`へ変更。COM4のアプリだけ再更新・照合し、ユーザーが両タブを数回切り替えて残像の解消を確認した。消灯・反転・長時間の視認性は確認待ち。ユーザーは現行`include/device-config.h`のSSIDを実運用APとして確認し、ローカルビルドにも同設定が含まれることを値を表示せず確認した。
 - STA接続は2.4 GHz帯が必須で、WPA2のPCホットスポットで接続を確認した。5 GHz帯とWPA2/WPA3混在は未検証。
 - 切断中は10秒ごとに `WiFi.begin` を再試行する（`src/main.cpp`）。 `setAutoReconnect(true)` だけではホットスポットOFF→ON後に復帰しなかった。
 - 設定用APは `povo-setup-` +ランダム4文字・パスワードはランダム16文字で画面表示する。固定名にはできない。
