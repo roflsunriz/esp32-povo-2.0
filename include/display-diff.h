@@ -13,7 +13,7 @@ static_assert(kHeight % kBandHeight == 0 && kBandCount <= 16,
 
 // TFT_eSpriteをTFT_eSPI基底参照で扱うときも初期幅240ではなく320全幅を消す。
 template <class Surface>
-void clearFrame(Surface& surface, uint32_t color) {
+void clearFrame(Surface& surface, uint16_t color) {
   surface.fillRect(0, 0, static_cast<int32_t>(kWidth),
                    static_cast<int32_t>(kHeight), color);
 }
