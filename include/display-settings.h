@@ -26,6 +26,19 @@ constexpr int kTabH = 24;
 constexpr int kTabY = kScreenH - kTabH;
 constexpr int kContentBottom = kTabY;
 
+// 状態ページの残り時間バー。残り割合に応じて左から縮む減るタイプ。
+constexpr int kBarX = 8;
+constexpr int kBarY = 74;
+constexpr int kBarW = 304;
+constexpr int kBarH = 10;
+
+// 1000分率の残り割合からバーの塗り幅（ピクセル）を求める。
+inline int barFillWidth(int totalWidth, uint64_t permille) {
+  if (totalWidth <= 0) return 0;
+  if (permille >= 1000) return totalWidth;
+  return static_cast<int>(static_cast<uint64_t>(totalWidth) * permille / 1000);
+}
+
 // 設定グリッド: 3列×4行=12件/ページ。32件で3ページ。
 constexpr int kSleepCols = 3;
 constexpr int kSleepRows = 4;

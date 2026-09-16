@@ -134,6 +134,22 @@ int main() {
   }
   mock::reset(); seed(4000);
   {
+    povo::Client client; check(client.begin(1000), "critical init");
+    check(!client.critical(), "normal by default");
+    client.setCritical(true); check(client.critical(), "critical set");
+    mock::Response response;
+    response.body = "{}"; response.length = -1; response.holdOpen = true;
+    mock::responses.push_back(response);
+    std::string body;
+    const auto start = mock::millis;
+    check(!client.fetchPlan(body, 1000) && mock::millis - start == 60000, "critical body deadline extended");
+    client.setCritical(false); check(!client.critical(), "normal restored");
+    mock::responses.push_back(response);
+    const auto restart = mock::millis;
+    check(!client.fetchPlan(body, 1000) && mock::millis - restart == 20000, "normal deadline kept");
+  }
+  mock::reset(); seed(4000);
+  {
     povo::Client client; check(client.begin(1000), "401 init");
     mock::push("", 401); mock::push(authResponse(5000)); mock::push("", 401);
     std::string body;

@@ -16,6 +16,10 @@ class Client {
   bool fetchPlan(std::string& body, uint64_t now);
   void logout();
   const char* error() const { return error_; }
+  // 期限間近・期限切れ後の重点取得では、128kbps級の絞り込み回線でも
+  // 取得できるようタイムアウトを延ばす。通常時は短い制限のままにする。
+  void setCritical(bool critical) { critical_ = critical; }
+  bool critical() const { return critical_; }
  private:
   Preferences preferences_;
   bool ready_ = false;
@@ -24,6 +28,7 @@ class Client {
   std::string device_, email_, authId_;
   uint64_t otpStartedMs_ = 0, lastSendMs_ = 0;
   bool sentBefore_ = false;
+  bool critical_ = false;
   const char* error_ = "";
   int request(const char* path, const std::string* post, bool authorized, std::string& response);
   bool save(const auth::Session& candidate);

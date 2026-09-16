@@ -61,6 +61,23 @@ int main(int argc, char** argv) {
     drawDisplay(&s, 120000, nullptr);
     if (ui::pixels[70 * 320 + 270] != bg)
       throw std::runtime_error("right-side setting remains after tab switch");
+    // 残り時間バーは残量に応じて縮み、数値表示と併存する。
+    s.expiryAtMs = s.serverTimeMs + 3600000ULL;
+    s.spanMs = 7200000ULL;
+    s.expirySource = ExpirySource::Server;
+    drawDisplay(&s, 0, nullptr);
+    if (ui::missing) throw std::runtime_error("unknown glyph with remaining bar");
+    if (ui::pixels[78 * 320 + 100] != accent)
+      throw std::runtime_error("remaining bar filled area missing");
+    if (ui::pixels[78 * 320 + 200] != panel)
+      throw std::runtime_error("remaining bar empty area missing");
+    drawDisplay(&s, 3600000ULL, nullptr);
+    if (ui::pixels[78 * 320 + 100] != panel)
+      throw std::runtime_error("expired bar was not empty");
+    s.expiryAtMs = 0; s.spanMs = 0;
+    drawDisplay(&s, 0, nullptr);
+    if (ui::pixels[78 * 320 + 100] != panel)
+      throw std::runtime_error("unknown expiry bar was not empty");
     drawCalibrationStep(text::touchStep1, touch::kTargetLeft, touch::kTargetTop);
     if (ui::missing) throw std::runtime_error("unknown glyph in touch calibration");
     drawCalibrationStep(text::touchStep2, touch::kTargetRight, touch::kTargetBottom);

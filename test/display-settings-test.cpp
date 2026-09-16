@@ -70,6 +70,12 @@ int main() {
     check(shouldSleep(86400, 86400000ULL), "24 hours sleeps");
     check(toggledRotation(kRotationNormal) == kRotationInverted, "toggle to inverted");
     check(toggledRotation(kRotationInverted) == kRotationNormal, "toggle to normal");
+    check(kBarX == 8 && kBarY == 74 && kBarW == 304 && kBarH == 10, "remaining bar geometry");
+    check(barFillWidth(304, 1000) == 304, "full bar");
+    check(barFillWidth(304, 500) == 152, "half bar shrinks");
+    check(barFillWidth(304, 0) == 0, "expired bar empty");
+    check(barFillWidth(304, 1500) == 304, "bar clamps at full");
+    check(barFillWidth(0, 500) == 0, "zero width bar");
     check(orientPoint({0, 0}, false).x == 0, "orient normal");
     const Point flipped = orientPoint({0, 0}, true);
     check(flipped.x == 319 && flipped.y == 239, "orient inverted");

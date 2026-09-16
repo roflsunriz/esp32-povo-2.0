@@ -30,7 +30,8 @@ Get-Content -Raw -LiteralPath .\COMMON-AGENTS.md
 - ホストテストの一部は標準assertを使う。Releaseで検査が消えないよう該当テスト内でNDEBUGを解除する。MSVCでは `cmake --build build/host --config Release` と `ctest --test-dir build/host -C Release --output-on-failure` も確認する。
 - 配布物は `.github/workflows/release.yml` が `git archive` で作るソースZIPとSHA-256一覧であり、個人設定入りファームウェアではない。依存更新も配布ソースの変更になる。版はCHANGELOGの該当節と `vX.Y.Z` タグで管理し、`scripts/release-notes.py` はリポジトリ直下で実行する。
 
-## 実機検証の所見（2026-09-06〜2026-09-14）
+## 実機検証の所見（2026-09-06〜2026-09-16）
+- 2026-09-16の現在接続ではCOM6のCH340（USB位置`1-1`）のみ到達可能で、COM3・COM4・COM5はゴースト表示のため対象外とした。COM6のesptool自動リセット接続も`Wrong boot mode detected (0x13)`で失敗し、従来の専用基板と同症状のため手動BOOT保持→RST短押し→BOOT解放でdownload modeへ入れる。書き込み前は全flash 4MBをGit管理外の`build/`へ退避し`verify-flash`で照合、パーティション表が一致する場合だけ0x10000アプリ領域を更新する（`how-to-update.md`）。COM3は触っていない。
 - 2026-09-14の現在接続ではCOM3のCodex MicroはUSB位置`1-8.1`、ユーザーがpovo専用基板と説明したCOM4は別位置`1-7`のCH340。COM4へのesptool自動リセット接続は`Wrong boot mode detected (0x13)`で失敗し、手動BOOT保持→RST短押し→BOOT解放でdownload modeに入った。全flash 4MBを`build/backup-povo-com4-20260914/`へ退避し`verify-flash`で実機と一致、SHA-256を同ディレクトリに保存した。既存パーティション表が新ビルドと一致し、旧アプリがpovoと確認したため、COM4の0x10000アプリ領域だけ更新して`verify-flash`で一致を確認した。COM3は触っていない。`--after no-reset-stub`後の`--before no-reset-no-sync`で書き込み後の照合へ接続できた。ユーザーが実機でBOOT長押し2点校正とペンのタブ切替、RST後の反応を報告した。v0.5.0のタブ切替で画面右側の残像が発生。TFT_eSPI基底の`fillScreen`がSprite幅240ピクセルしか消さないため、v0.5.1では320×240全体の`fillRect`へ変更。COM4のアプリだけ再更新・照合し、ユーザーが両タブを数回切り替えて残像の解消を確認した。消灯・反転・長時間の視認性は確認待ち。ユーザーは現行`include/device-config.h`のSSIDを実運用APとして確認し、ローカルビルドにも同設定が含まれることを値を表示せず確認した。
 - STA接続は2.4 GHz帯が必須で、WPA2のPCホットスポットで接続を確認した。5 GHz帯とWPA2/WPA3混在は未検証。
 - 切断中は10秒ごとに `WiFi.begin` を再試行する（`src/main.cpp`）。 `setAutoReconnect(true)` だけではホットスポットOFF→ON後に復帰しなかった。
@@ -46,6 +47,11 @@ Get-Content -Raw -LiteralPath .\COMMON-AGENTS.md
 - 2026-09-14、通常画面は320×240の8-bit Spriteを16行ずつハッシュ比較し、変化した帯だけLCDへ転送する（`include/display-diff.h`、`src/status-display.cpp`）。回転、液晶復帰、ログイン設定画面、タッチ校正の後は全帯を再転送する。メモリ不足時は直接描画へフォールバックし画面へ原因を表示する。ホストテストとビルド済み、実機のちらつき・TLS併用メモリは未確認。
 - 設定と画面向きはNVS `povo-display`（sleep_sec・inverted）に保存する。消灯中も取得は継続し描画だけ休止する。設定用ポータル表示中はタブ・消灯を適用しない。
 - 2026-09-07はホスト6テスト・PIOビルド・Chrome設定画面テストまで成功。タッチ・消灯・復帰・反転の実機確認は追加基板待ちで未実施（`verification.md` の残り7番）。
+
+## 残り時間バー・重点取得の実装記録（2026-09-16・実機未検証）
+- 残り時間バーは状態画面の分表示の下（x=8・y=74・幅304・高さ10）に描き、数値表示は維持する。背景`panel`へ残量分だけ`accent`を左から塗る減るタイプ。分母はトッピング有効期間`Status::spanMs`で、同じ期限の再取得では維持し、初回・変更時は`expiry-now`へ取り直す。NVS `povo-display` の`span_ms`/`expiry_ms`（ULong64）へ保存し再起動後も復元する（`include/status-model.h`、`include/display-settings.h::barFillWidth`、`src/status-display.cpp`、`src/main.cpp`）。
+- 重点取得は残り30分以下・期限切れ後（`isCritical`）に1分ごと（`kCriticalPollMs`）、それ以外は5分ごと（`kNormalPollMs`）。期限不明は通常間隔のまま。リニュー（期限の後ろ倒し、`isRenewed`）で自動復帰する。取得失敗時も重点期間中は1分後に再試行する。重点時は`Client::setCritical(true)`でTLS20秒・接続20秒・応答30秒・受信60秒へ延ばし（通常10秒・10秒・10秒・20秒）、128kbps級でも64KB応答を取り切る。字形追加は不要で`scripts/generate-font.py`の差分なしを確認した。
+- ホストビルドは `VsDevCmd.bat -arch=x64` 読み込み後に `cmake -S . -B build/host -G "NMake Makefiles"` を使う（既定のx86ではリンクが混在して失敗する）。2026-09-16時点でcmakeがVS18系のcl 14.51を検出し、`include/display-diff.h::clearFrame` の`uint32_t→uint16_t` narrowingが`/WX`で誤りになったため引数を`uint16_t`へ修正した。
 
 ## 直接認証の調査資料
 - パッチ版アプリ・PC中継への依存を廃止するための認証調査は `docs/auth-capture/` に保存する。静的解析の根拠は `static-analysis.md`、実測と再採取手順は同ディレクトリの `README.md` を参照する。静的解析と実機観測を混同しない。

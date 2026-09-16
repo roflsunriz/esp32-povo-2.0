@@ -42,9 +42,11 @@ std::string newDevice() {
   return result;
 }
 // Bound both decoded bytes and chunk framing, including slow streamed responses.
+// 128kbps=16KB/sでは64KB級の応答に数秒以上かかるため、重点取得時は制限を延ばす。
 class BoundedBody {
  public:
-  explicit BoundedBody(WiFiClientSecure& input) : input_(input) {}
+  explicit BoundedBody(WiFiClientSecure& input, uint64_t budgetMs = 20000)
+      : input_(input), budgetMs_(budgetMs) {}
   std::string body;
   const uint64_t started = monotonicMs();
   bool read(int length, bool chunked) {
@@ -81,10 +83,11 @@ class BoundedBody {
   }
  private:
   WiFiClientSecure& input_;
+  const uint64_t budgetMs_;
   size_t rawBytes_ = 0;
   int byte() {
     for (;;) {
-      if (monotonicMs() - started >= 20000 || rawBytes_ >= maxBody + 8192) return -1;
+      if (monotonicMs() - started >= budgetMs_ || rawBytes_ >= maxBody + 8192) return -1;
       if (input_.available()) { ++rawBytes_; return input_.read(); }
       if (!input_.connected()) return -2;
       delay(1);
@@ -182,10 +185,10 @@ int Client::request(const char* path, const std::string* post, bool authorized, 
   if (strlen(POVO_ROOT_CA) == 0) { error_ = "certificate_missing"; return -1; }
   WiFiClientSecure transport;
   transport.setCACert(POVO_ROOT_CA);
-  transport.setHandshakeTimeout(10);
+  transport.setHandshakeTimeout(critical_ ? 20 : 10);
   HTTPClient http;
-  http.setConnectTimeout(10000);
-  http.setTimeout(10000);
+  http.setConnectTimeout(critical_ ? 20000 : 10000);
+  http.setTimeout(critical_ ? 30000 : 10000);
   http.setReuse(false);
   http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
   if (!http.begin(transport, String("https://app.povo.jp") + path)) {
@@ -221,7 +224,7 @@ int Client::request(const char* path, const std::string* post, bool authorized, 
       (encoding.length() && encoding != "identity")) {
     error_ = "unsupported_encoding"; http.end(); return -1;
   }
-  BoundedBody sink(transport);
+  BoundedBody sink(transport, critical_ ? 60000 : 20000);
   const bool complete = sink.read(http.getSize(), transfer == "chunked");
   http.end();
   if (!complete) {

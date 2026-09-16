@@ -192,22 +192,31 @@ void drawStatusPage(const povo::Status* status, uint64_t elapsedMs, const char* 
   }
   const View v = derive(*status, elapsedMs);
   char buffer[96];
-  if (!v.remainingKnown) line(34, text::unknown);
+  if (!v.remainingKnown) line(32, text::unknown);
   else {
     snprintf(buffer, sizeof(buffer), text::remaining,
-      (unsigned long long)(v.remainingSeconds / 86400), (unsigned long long)(v.remainingSeconds / 3600 % 24)); line(34, buffer, accent);
+      (unsigned long long)(v.remainingSeconds / 86400), (unsigned long long)(v.remainingSeconds / 3600 % 24)); line(32, buffer, accent);
     snprintf(buffer, sizeof(buffer), text::minutes,
-      (unsigned long long)(v.remainingSeconds / 3600), (unsigned long long)(v.remainingSeconds / 60 % 60)); line(54, buffer);
+      (unsigned long long)(v.remainingSeconds / 3600), (unsigned long long)(v.remainingSeconds / 60 % 60)); line(52, buffer);
   }
-  line(76, (String(text::expiry) + date(status->expiryAtMs) + " [" + text::sources[(int)status->expirySource] + "]").c_str());
-  line(98, text::directMode);
-  if (v.confirmationPending) line(120, text::pending, accent);
-  line(142, text::precision);
-  snprintf(buffer, sizeof(buffer), text::sync, (unsigned long long)(v.syncAgeMs / 60000)); line(164, buffer);
-  if (error) line(186, error, accent);
-  else if (!canvasReady) line(186, text::displayMemoryError, accent);
-  else if (v.stale) line(186, text::stale, accent);
-  else line(186, text::rotateHint);
+  // 減るタイプの残り時間バー。数値表示は維持し、視覚的に残量を示す。
+  const uint64_t barPermille = v.remainingKnown
+      ? progressPermille(status->expiryAtMs, v.nowMs, status->spanMs) : 0;
+  const int fill = povo::display::barFillWidth(povo::display::kBarW, barPermille);
+  drawing->fillRect(povo::display::kBarX, povo::display::kBarY,
+                    povo::display::kBarW, povo::display::kBarH, panel);
+  if (fill > 0)
+    drawing->fillRect(povo::display::kBarX, povo::display::kBarY,
+                      fill, povo::display::kBarH, accent);
+  line(90, (String(text::expiry) + date(status->expiryAtMs) + " [" + text::sources[(int)status->expirySource] + "]").c_str());
+  line(112, text::directMode);
+  if (v.confirmationPending) line(132, text::pending, accent);
+  line(150, text::precision);
+  snprintf(buffer, sizeof(buffer), text::sync, (unsigned long long)(v.syncAgeMs / 60000)); line(168, buffer);
+  if (error) line(188, error, accent);
+  else if (!canvasReady) line(188, text::displayMemoryError, accent);
+  else if (v.stale) line(188, text::stale, accent);
+  else line(188, text::rotateHint);
 }
 void drawSleepPage() {
   using namespace povo::display;
