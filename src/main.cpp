@@ -108,7 +108,7 @@ void loop() {
   if (!portalActive() && displayAwake() && now >= nextDraw) {
     drawDisplay(haveStatus ? &status : nullptr, haveStatus ? ms() - receivedAt : 0, failure,
                 nextPoll > now ? nextPoll - now : 0, false);
-    nextDraw = ms() + 10000;
+    nextDraw = ms() + 1000;
   }
   delay(5);
 }
