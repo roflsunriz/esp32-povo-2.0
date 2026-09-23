@@ -47,12 +47,13 @@ inline bool isValidPollSlider(uint32_t seconds) {
 constexpr int kScreenW = 320;
 constexpr int kScreenH = 240;
 constexpr int kTabH = 24;
-constexpr int kTabY = kScreenH - kTabH;
-constexpr int kContentBottom = kTabY;
+constexpr int kTabY = 0;
+constexpr int kContentTop = kTabY + kTabH;
+constexpr int kContentBottom = kScreenH;
 
 // 状態ページの残り時間バー。残り割合に応じて左から縮む減るタイプ。
 constexpr int kBarX = 8;
-constexpr int kBarY = 74;
+constexpr int kBarY = 98;
 constexpr int kBarW = 304;
 constexpr int kBarH = 10;
 
@@ -63,23 +64,14 @@ inline int barFillWidth(int totalWidth, uint64_t permille) {
   return static_cast<int>(static_cast<uint64_t>(totalWidth) * permille / 1000);
 }
 
-// 設定タブのスライダー配置（内容座標）。タッチ面は x 24..295・y 24..215
-// のため、操作子はその範囲へ収める。内容は kSleepContentH まであり、
-// 表示域を超えた分だけスクロールする。
+// 設定タブのスライダー配置。タッチ面は x 24..295・y 24..215 のため、
+// 操作子はその範囲へ収める。内容は表示域に収まるためスクロールは不要。
 constexpr int kSliderX0 = 24;
 constexpr int kSliderX1 = 275;
-constexpr int kSliderMinutesY = 78;
-constexpr int kSliderHoursY = 126;
-constexpr int kSliderPollY = 174;
+constexpr int kSliderMinutesY = 102;
+constexpr int kSliderHoursY = 150;
+constexpr int kSliderPollY = 198;
 constexpr int kSliderHalfH = 14;
-constexpr int kSleepContentH = 224;
-constexpr int kSleepVisibleTop = 24;
-constexpr int kSleepVisibleBottom = 210;
-constexpr int kSleepScrollMax =
-    kSleepContentH - (kSleepVisibleBottom - kSleepVisibleTop);
-constexpr int kSleepScrollBarX0 = 283;
-constexpr int kSleepScrollBarY0 = 28;
-constexpr int kSleepScrollBarY1 = 210;
 
 constexpr uint8_t kRotationNormal = 1;
 constexpr uint8_t kRotationInverted = 3;
@@ -102,10 +94,16 @@ struct BootFilter {
   bool armed = true;
 };
 
-inline int clampSleepScroll(int scroll) {
-  if (scroll < 0) return 0;
-  if (scroll > kSleepScrollMax) return kSleepScrollMax;
-  return scroll;
+inline int sliderXFromValue(uint32_t value, uint32_t minV, uint32_t maxV) {
+  if (maxV <= minV) return kSliderX0;
+  if (value < minV) value = minV;
+  if (value > maxV) value = maxV;
+  const uint32_t trackW = static_cast<uint32_t>(kSliderX1 - kSliderX0);
+  const uint32_t range = maxV - minV;
+  return kSliderX0 +
+         static_cast<int>((static_cast<uint64_t>(value - minV) * trackW +
+                           range / 2) /
+                          range);
 }
 
 // タップ位置からスライダー値を求める。端は丸めて段階値へ寄せる。
@@ -123,32 +121,8 @@ inline uint32_t sliderValueFromX(int x, uint32_t minV, uint32_t maxV,
   return minV + index * step;
 }
 
-inline int sliderXFromValue(uint32_t value, uint32_t minV, uint32_t maxV) {
-  if (maxV <= minV) return kSliderX0;
-  if (value < minV) value = minV;
-  if (value > maxV) value = maxV;
-  const uint32_t trackW = static_cast<uint32_t>(kSliderX1 - kSliderX0);
-  const uint32_t range = maxV - minV;
-  return kSliderX0 +
-         static_cast<int>((static_cast<uint64_t>(value - minV) * trackW +
-                           range / 2) /
-                          range);
-}
-
-// スクロールバーの指位置から offset を求める。つまみ中央合わせ。
-inline int sleepScrollFromTrackY(int y) {
-  const int trackH = kSleepScrollBarY1 - kSleepScrollBarY0;
-  const int thumbH = (kSleepVisibleBottom - kSleepVisibleTop) * trackH /
-                     kSleepContentH;
-  const int travel = trackH - thumbH;
-  if (travel <= 0 || kSleepScrollMax <= 0) return 0;
-  const int offset =
-      (y - thumbH / 2 - kSleepScrollBarY0) * kSleepScrollMax / travel;
-  return clampSleepScroll(offset);
-}
-
 inline bool tabForTouch(int x, int y, Page& out) {
-  if (x < 0 || x >= kScreenW || y < kTabY || y >= kScreenH) return false;
+  if (x < 0 || x >= kScreenW || y < kTabY || y >= kTabY + kTabH) return false;
   out = x < kScreenW / 2 ? Page::Status : Page::Sleep;
   return true;
 }

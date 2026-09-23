@@ -38,23 +38,18 @@ int main() {
     check(sliderValueFromX(999, 60, 600, 60) == 600, "track clamps right");
     check(sliderXFromValue(0, 0, 59) == kSliderX0, "thumb left end");
     check(sliderXFromValue(59, 0, 59) == kSliderX1, "thumb right end");
-    check(clampSleepScroll(-5) == 0, "scroll clamps low");
-    check(clampSleepScroll(9999) == kSleepScrollMax, "scroll clamps high");
-    check(sleepScrollFromTrackY(kSleepScrollBarY0) == 0, "scrollbar top");
-    check(sleepScrollFromTrackY(kSleepScrollBarY1) == kSleepScrollMax,
-          "scrollbar bottom");
     Page page = Page::Status;
-    check(tabForTouch(0, 216, page) && page == Page::Status, "left tab");
-    check(tabForTouch(319, 239, page) && page == Page::Sleep, "right tab");
-    check(!tabForTouch(160, 215, page), "above tabs");
-    check(!tabForTouch(-1, 220, page), "outside left");
+    check(tabForTouch(0, 10, page) && page == Page::Status, "left tab");
+    check(tabForTouch(319, 10, page) && page == Page::Sleep, "right tab");
+    check(!tabForTouch(160, 30, page), "below tabs");
+    check(!tabForTouch(-1, 10, page), "outside left");
     check(shouldSleep(15, 15000), "sleep at timeout");
     check(!shouldSleep(15, 14999), "awake before timeout");
     check(!shouldSleep(0, 86400000ULL), "none never sleeps");
     check(shouldSleep(86400, 86400000ULL), "24 hours sleeps");
     check(toggledRotation(kRotationNormal) == kRotationInverted, "toggle to inverted");
     check(toggledRotation(kRotationInverted) == kRotationNormal, "toggle to normal");
-    check(kBarX == 8 && kBarY == 74 && kBarW == 304 && kBarH == 10, "remaining bar geometry");
+    check(kBarX == 8 && kBarY == 98 && kBarW == 304 && kBarH == 10, "remaining bar geometry");
     check(barFillWidth(304, 1000) == 304, "full bar");
     check(barFillWidth(304, 500) == 152, "half bar shrinks");
     check(barFillWidth(304, 0) == 0, "expired bar empty");

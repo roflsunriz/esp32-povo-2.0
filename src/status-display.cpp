@@ -26,7 +26,8 @@ TFT_eSprite canvas(&tft);
 TFT_eSPI* drawing = &tft;
 display_diff::Bands bandDiff;
 bool canvasReady = false;
-constexpr uint16_t bg = 0x0841, fg = 0xFFFF, accent = 0xFFE0, panel = 0x18E3;
+constexpr uint16_t bg = 0x1082, fg = 0xFFFF, accent = 0xFFE0, panel = 0x18C3;
+constexpr uint16_t barBg = 0x4208;
 // XPT2046配線とBOOTボタンはESP32-2432S028Rの代表値。TFTとは別バス(VSPI)。
 constexpr int kTouchClockPin = 25, kTouchMisoPin = 39, kTouchMosiPin = 32,
               kTouchChipSelectPin = 33, kTouchIrqPin = 36;
@@ -40,12 +41,10 @@ struct State {
   Page page = Page::Status;
   uint32_t sleepSec = 0;
   uint32_t pollSec = 300;
-  int sleepScroll = 0;
-  // Whole-content drag gesture fixed at contact start.
-  int dragMode = 0;  // 0 none, 1 minutes, 2 hours, 3 poll, 4 scroll
+  // スライダーのドラッグ操作種別（接触開始点で固定）。0は追従なし。
+  int dragMode = 0;  // 0 none, 1 minutes, 2 hours, 3 poll
   int dragStartX = 0;
   int dragStartY = 0;
-  int dragStartScroll = 0;
   bool inverted = false;
   bool awake = true;
   bool dirty = false;
@@ -138,7 +137,6 @@ void setAwakeLocked(bool awake) {
 void loadSettings() {
   state.sleepSec = 0;
   state.pollSec = 300;
-  state.sleepScroll = 0;
   state.dragMode = 0;
   state.inverted = false;
   state.calibration = {};
@@ -197,37 +195,39 @@ void drawTabs() {
 void drawStatusPage(const povo::Status* status, uint64_t elapsedMs, const char* error,
                       uint64_t nextPollInMs, bool fetching) {
   using namespace povo;
-  line(6, text::title, accent);
+  line(30, text::title, accent);
   if (!status) {
-    line(50, text::noStatus);
-    if (error) line(88, error, accent);
-    if (!canvasReady) line(186, text::displayMemoryError, accent);
+    line(74, text::noStatus);
+    if (error) line(112, error, accent);
+    if (!canvasReady) line(210, text::displayMemoryError, accent);
     return;
   }
   const View v = derive(*status, elapsedMs);
   char buffer[96];
-  if (!v.remainingKnown) line(32, text::unknown);
+  if (!v.remainingKnown) line(56, text::unknown);
   else {
     snprintf(buffer, sizeof(buffer), text::remaining,
-      (unsigned long long)(v.remainingSeconds / 86400), (unsigned long long)(v.remainingSeconds / 3600 % 24)); line(32, buffer, accent);
+      (unsigned long long)(v.remainingSeconds / 86400), (unsigned long long)(v.remainingSeconds / 3600 % 24)); line(56, buffer, accent);
     snprintf(buffer, sizeof(buffer), text::minutes,
-      (unsigned long long)(v.remainingSeconds / 3600), (unsigned long long)(v.remainingSeconds / 60 % 60)); line(52, buffer);
+      (unsigned long long)(v.remainingSeconds / 3600), (unsigned long long)(v.remainingSeconds / 60 % 60)); line(76, buffer);
   }
-  // 減るタイプの残り時間バー。数値表示は維持し、視覚的に残量を示す。
+  // 減るタイプの残り時間バー。白枠に暗い地と残量の塗りを載せる。
   const uint64_t barPermille = v.remainingKnown
       ? progressPermille(status->expiryAtMs, v.nowMs, status->spanMs) : 0;
+  drawing->drawRect(povo::display::kBarX, povo::display::kBarY,
+                    povo::display::kBarW, povo::display::kBarH, fg);
   const int fill = povo::display::barFillWidth(povo::display::kBarW, barPermille);
-  drawing->fillRect(povo::display::kBarX, povo::display::kBarY,
-                    povo::display::kBarW, povo::display::kBarH, panel);
-  if (fill > 0)
-    drawing->fillRect(povo::display::kBarX, povo::display::kBarY,
-                      fill, povo::display::kBarH, accent);
-  line(90, (String(text::expiry) + date(status->expiryAtMs) + " [" + text::sources[(int)status->expirySource] + "]").c_str());
-  line(112, text::directMode);
-  if (v.confirmationPending) line(132, text::pending, accent);
-  line(150, text::precision);
-  if (error) line(168, error, accent);
-  else if (fetching) line(168, text::fetchingText, accent);
+  drawing->fillRect(povo::display::kBarX + 1, povo::display::kBarY + 1,
+                    povo::display::kBarW - 2, povo::display::kBarH - 2, barBg);
+  if (fill > 2)
+    drawing->fillRect(povo::display::kBarX + 1, povo::display::kBarY + 1,
+                      fill - 2, povo::display::kBarH - 2, accent);
+  line(114, (String(text::expiry) + date(status->expiryAtMs) + " [" + text::sources[(int)status->expirySource] + "]").c_str());
+  line(136, text::directMode);
+  if (v.confirmationPending) line(156, text::pending, accent);
+  line(174, text::precision);
+  if (error) line(192, error, accent);
+  else if (fetching) line(192, text::fetchingText, accent);
   else if (nextPollInMs > 0) {
     String combined;
     {
@@ -242,31 +242,27 @@ void drawStatusPage(const povo::Status* status, uint64_t elapsedMs, const char* 
              (unsigned long long)(nextPollInMs / 1000 % 60));
     combined += " ";
     combined += nextPart;
-    line(168, combined.c_str());
+    line(192, combined.c_str());
   }
   else {
-    snprintf(buffer, sizeof(buffer), text::sync, (unsigned long long)(v.syncAgeMs / 60000)); line(168, buffer);
+    snprintf(buffer, sizeof(buffer), text::sync, (unsigned long long)(v.syncAgeMs / 60000)); line(192, buffer);
   }
-  if (error) line(188, error, accent);
-  else if (!canvasReady) line(188, text::displayMemoryError, accent);
-  else if (v.stale) line(188, text::stale, accent);
-  else line(188, text::rotateHint);
+  if (error) line(212, error, accent);
+  else if (!canvasReady) line(212, text::displayMemoryError, accent);
+  else if (v.stale) line(212, text::stale, accent);
+  else line(212, text::rotateHint);
 }
 void drawSleepPage() {
   using namespace povo::display;
-  const int scroll = clampSleepScroll(state.sleepScroll);
-  auto visibleY = [scroll](int y) { return y - scroll; };
   auto drawRow = [&](int y, const char* text, uint16_t color = fg) {
-    const int visible = visibleY(y);
-    if (visible < kSleepVisibleTop || visible > kSleepVisibleBottom - 16)
-      return;
-    line(visible, text, color);
+    if (y < 40 || y > 218) return;
+    line(y, text, color);
   };
   auto drawTrack = [&](int centerY, uint32_t value, uint32_t minV,
                        uint32_t maxV) {
-    const int y = visibleY(centerY);
+    const int y = centerY;
     // タブと見出しの領域へはみ出さない。
-    if (y < kSleepVisibleTop + 8 || y > kSleepVisibleBottom - 8) return;
+    if (y < 48 || y > 228) return;
     drawing->drawRect(kSliderX0, y - 2, kSliderX1 - kSliderX0, 5, fg);
     const int thumbX = sliderXFromValue(value, minV, maxV);
     if (thumbX > kSliderX0)
@@ -282,34 +278,22 @@ void drawSleepPage() {
   else
     snprintf(combined, sizeof(combined), povo::text::sleepCombined,
              static_cast<unsigned>(hours), static_cast<unsigned>(minutes));
-  line(6, povo::text::sleepTitle, accent);
-  char title[64];
-  snprintf(title, sizeof(title), "%s", combined);
-  drawRow(32, title, fg);
+  line(30, povo::text::sleepTitle, accent);
+  drawRow(56, combined, fg);
   char label[48];
   snprintf(label, sizeof(label), povo::text::sleepMinutesLabel,
            static_cast<unsigned>(minutes));
-  drawRow(52, label, fg);
+  drawRow(76, label, fg);
   drawTrack(kSliderMinutesY, minutes, 0, kSleepMinutesMax);
   snprintf(label, sizeof(label), povo::text::sleepHoursLabel,
            static_cast<unsigned>(hours));
-  drawRow(100, label, fg);
+  drawRow(124, label, fg);
   drawTrack(kSliderHoursY, hours, 0, kSleepHoursMax);
   snprintf(label, sizeof(label), povo::text::sleepPollLabel,
            static_cast<unsigned>(state.pollSec));
-  drawRow(148, label, fg);
+  drawRow(172, label, fg);
   drawTrack(kSliderPollY, state.pollSec, kPollSliderMinSec, kPollSliderMaxSec);
-  drawRow(194, povo::text::sleepAlwaysNote, fg);
-  // 右端のスクロールバーは固定表示。
-  const int trackH = kSleepScrollBarY1 - kSleepScrollBarY0;
-  const int thumbH = (kSleepVisibleBottom - kSleepVisibleTop) * trackH /
-                     kSleepContentH;
-  const int travel = trackH - thumbH;
-  const int thumbY = travel <= 0 || kSleepScrollMax <= 0
-                         ? kSleepScrollBarY0
-                         : kSleepScrollBarY0 + scroll * travel / kSleepScrollMax;
-  drawing->drawRect(kSleepScrollBarX0, kSleepScrollBarY0, 12, trackH, panel);
-  drawing->fillRect(kSleepScrollBarX0 + 2, thumbY, 8, thumbH, fg);
+  drawRow(218, povo::text::sleepAlwaysNote, fg);
 }
 void redrawFromCache() {
   if (!state.awake) return;
@@ -524,13 +508,10 @@ void pollDisplayInput(uint64_t nowMs) {
     state.dragMode = 0;
     state.dragStartX = point.x;
     state.dragStartY = point.y;
-    state.dragStartScroll = povo::display::clampSleepScroll(state.sleepScroll);
     Page startTab;
     if (!povo::display::tabForTouch(point.x, point.y, startTab) &&
         state.awake && state.page == Page::Sleep) {
-      const int startContentY =
-          point.y + povo::display::clampSleepScroll(state.sleepScroll);
-      state.dragMode = 4;
+      const int startContentY = point.y;
       if (point.x >= 16 && point.x <= 283) {
         if (startContentY >= povo::display::kSliderMinutesY - povo::display::kSliderHalfH &&
             startContentY < povo::display::kSliderMinutesY + povo::display::kSliderHalfH)
@@ -548,16 +529,6 @@ void pollDisplayInput(uint64_t nowMs) {
     // 接触継続中のドラッグ。Sleepタブでは同種別の操作だけを追従する。
     if (state.awake && state.page == Page::Sleep && state.dragMode != 0) {
       state.lastActivityMs = nowMs;
-      if (state.dragMode == 4) {
-        const int delta = state.dragStartY - point.y;
-        if (delta < 6 && delta > -6) return;
-        const int target = povo::display::clampSleepScroll(state.dragStartScroll + delta);
-        if (target != povo::display::clampSleepScroll(state.sleepScroll)) {
-          state.sleepScroll = target;
-          redrawFromCache();
-        }
-        return;
-      }
       if (point.x < 16 || point.x > 283) return;
       if (state.dragMode == 1) {
         const uint32_t minutes = povo::display::sliderValueFromX(
@@ -610,17 +581,8 @@ void pollDisplayInput(uint64_t nowMs) {
     return;
   }
   if (state.page != Page::Sleep) return;
-  const int scroll = povo::display::clampSleepScroll(state.sleepScroll);
-  const int contentY = point.y + scroll;
-  // スクロールバーは指位置へ比例移動する。
-  if (point.x >= 281 && point.y >= povo::display::kSleepScrollBarY0 &&
-      point.y < povo::display::kSleepScrollBarY1) {
-    state.sleepScroll = povo::display::sleepScrollFromTrackY(point.y);
-    state.dragMode = 4;
-    redrawFromCache();
-    return;
-  }
-  state.dragMode = 4;
+  const int contentY = point.y;
+  state.dragMode = 0;
   uint32_t minutes = povo::display::sleepMinutesPart(state.sleepSec);
   uint32_t hours = povo::display::sleepHoursPart(state.sleepSec);
   bool timeoutTouched = false;
@@ -662,7 +624,6 @@ void pollDisplayInput(uint64_t nowMs) {
     redrawFromCache();
     return;
   }
-  // 空白タップはスクロール開始点だけを確定する。
   redrawFromCache();
 #else
   (void)nowMs;

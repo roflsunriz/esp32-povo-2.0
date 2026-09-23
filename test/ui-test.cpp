@@ -64,29 +64,29 @@ int main(int argc, char** argv) {
     setDisplayPage(povo::display::Page::Sleep);
     drawDisplay(&s, 120000, nullptr, 0, false);
     if (ui::missing) throw std::runtime_error("unknown glyph in slider settings");
-    // スクロールバーのつまみ（白）が描かれている。
-    if (ui::pixels[160 * 320 + 291] != fg)
-      throw std::runtime_error("scrollbar thumb missing");
+    // 分スライダーのつまみ（10分相当）が白く描かれている。
+    if (ui::pixels[102 * 320 + 62] != fg)
+      throw std::runtime_error("minutes slider thumb missing");
     setDisplayPage(povo::display::Page::Status);
     drawDisplay(&s, 120000, nullptr, 0, false);
-    if (ui::pixels[160 * 320 + 291] != bg)
-      throw std::runtime_error("scrollbar remains after tab switch");
+    if (ui::pixels[98 * 320 + 8] != fg)
+      throw std::runtime_error("status bar outline missing after tab switch");
     // 残り時間バーは残量に応じて縮み、数値表示と併存する。
     s.expiryAtMs = s.serverTimeMs + 3600000ULL;
     s.spanMs = 7200000ULL;
     s.expirySource = ExpirySource::Server;
     drawDisplay(&s, 0, nullptr, 0, false);
     if (ui::missing) throw std::runtime_error("unknown glyph with remaining bar");
-    if (ui::pixels[78 * 320 + 100] != accent)
+    if (ui::pixels[102 * 320 + 100] != accent)
       throw std::runtime_error("remaining bar filled area missing");
-    if (ui::pixels[78 * 320 + 200] != panel)
+    if (ui::pixels[102 * 320 + 200] != barBg)
       throw std::runtime_error("remaining bar empty area missing");
     drawDisplay(&s, 3600000ULL, nullptr, 0, false);
-    if (ui::pixels[78 * 320 + 100] != panel)
+    if (ui::pixels[102 * 320 + 100] != barBg)
       throw std::runtime_error("expired bar was not empty");
     s.expiryAtMs = 0; s.spanMs = 0;
     drawDisplay(&s, 0, nullptr, 0, false);
-    if (ui::pixels[78 * 320 + 100] != panel)
+    if (ui::pixels[102 * 320 + 100] != barBg)
       throw std::runtime_error("unknown expiry bar was not empty");
     drawCalibrationStep(text::touchStep1, touch::kTargetLeft, touch::kTargetTop);
     if (ui::missing) throw std::runtime_error("unknown glyph in touch calibration");
