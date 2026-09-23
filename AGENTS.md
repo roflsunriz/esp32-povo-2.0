@@ -43,14 +43,14 @@ Get-Content -Raw -LiteralPath .\COMMON-AGENTS.md
 - タッチはXPT2046をTFTと別バスのVSPI（CLK 25・MISO 39・MOSI 32・CS 33・IRQ 36）で読み、`lib/sensitive-xpt2046` と近接3回の判定はcodex-notifications式を使う。TFTとタッチのピンが別系統のためTFT_eSPI内蔵タッチは使わない。旧読み取りは最後にPD0=1を残してPENIRQを無効化していたため、ドライバー末尾のPD0=0変換を維持する。消灯中の接触は離すまで復帰専用とする。2026-09-14時点でこの修正と校正はビルド・ホストテスト済み、実機未検証。
 - 起動後BOOT長押しで2点の位置・押圧感度を調整する。NVS `povo-display` の `touch_calib` 単一blobへバージョン・検証値付きで保存し、旧版は既定値へ安全にフォールバックする。押下取得・保存に失敗した場合は旧値を維持する。ペン自体が抵抗膜へ接触できずPENIRQが出ない場合はソフトウェア閾値では解決できない（`src/status-display.cpp`、`include/touch-calibration.h`、`verification.md`）。
 - BOOTボタンはGPIO0（INPUT_PULLUP）。30msチャタリング除去・50ms以上押して離したら1回押しで上下反転（rotation 1⇔3、タッチ座標も反転）。
-- 消灯設定32件（なし・15秒・30秒・1分・2分・5分・10分・30分・1時間・2〜24時間毎時）は `include/display-settings.h` に純粋ロジックとして集約し `test/display-settings-test.cpp` で検証する。表示文言の正本は `include/ui-text.h`、字形は `scripts/generate-font.py` で再生成する。
+- 消灯設定は `include/display-settings.h` に純粋ロジックとして集約し `test/display-settings-test.cpp` で検証する。0〜59分・0〜24時間・取得間隔60〜600秒（60秒刻み）のスライダーとスクロールバーを備え、内容ドラッグのスクロールとドラッグ操作に対応する。表示文言の正本は `include/ui-text.h`、字形は `scripts/generate-font.py` で再生成する。
 - 2026-09-14、通常画面は320×240の8-bit Spriteを16行ずつハッシュ比較し、変化した帯だけLCDへ転送する（`include/display-diff.h`、`src/status-display.cpp`）。回転、液晶復帰、ログイン設定画面、タッチ校正の後は全帯を再転送する。メモリ不足時は直接描画へフォールバックし画面へ原因を表示する。ホストテストとビルド済み、実機のちらつき・TLS併用メモリは未確認。
-- 設定と画面向きはNVS `povo-display`（sleep_sec・inverted）に保存する。消灯中も取得は継続し描画だけ休止する。設定用ポータル表示中はタブ・消灯を適用しない。
+- 設定と画面向き・取得間隔はNVS `povo-display`（sleep_sec・poll_sec・inverted）に保存する。消灯中も取得は継続し描画だけ休止する。設定用ポータル表示中はタブ・消灯を適用しない。
 - 2026-09-07はホスト6テスト・PIOビルド・Chrome設定画面テストまで成功。タッチ・消灯・復帰・反転の実機確認は追加基板待ちで未実施（`verification.md` の残り7番）。
 
 ## 残り時間バー・重点取得の実装記録（2026-09-16・実機未検証）
 - 残り時間バーは状態画面の分表示の下（x=8・y=74・幅304・高さ10）に描き、数値表示は維持する。背景`panel`へ残量分だけ`accent`を左から塗る減るタイプ。分母はトッピング有効期間`Status::spanMs`で、同じ期限の再取得では維持し、初回・変更時は`expiry-now`へ取り直す。NVS `povo-display` の`span_ms`/`expiry_ms`（ULong64）へ保存し再起動後も復元する（`include/status-model.h`、`include/display-settings.h::barFillWidth`、`src/status-display.cpp`、`src/main.cpp`）。
-- 重点取得は残り30分以下・期限切れ後（`isCritical`）に1分ごと（`kCriticalPollMs`）、それ以外は5分ごと（`kNormalPollMs`）。期限不明は通常間隔のまま。リニュー（期限の後ろ倒し、`isRenewed`）で自動復帰する。取得失敗時も重点期間中は1分後に再試行する。重点時は`Client::setCritical(true)`でTLS20秒・接続20秒・応答30秒・受信60秒へ延ばし（通常10秒・10秒・10秒・20秒）、128kbps級でも64KB応答を取り切る。字形追加は不要で`scripts/generate-font.py`の差分なしを確認した。
+- 重点取得は残り30分以下・期限切れ後（`isCritical`）に1分ごと（`kCriticalPollMs`）、それ以外はNVSの取得間隔設定（初期値5分）ごと。期限不明は通常間隔のまま。リニュー（期限の後ろ倒し、`isRenewed`）で自動復帰する。取得失敗時も重点期間中は1分後に再試行する。重点時は`Client::setCritical(true)`でTLS20秒・接続20秒・応答30秒・受信60秒へ延ばし（通常10秒・10秒・10秒・20秒）、128kbps級でも64KB応答を取り切る。字形追加は不要で`scripts/generate-font.py`の差分なしを確認した。
 - ホストビルドは `VsDevCmd.bat -arch=x64` 読み込み後に `cmake -S . -B build/host -G "NMake Makefiles"` を使う（既定のx86ではリンクが混在して失敗する）。2026-09-16時点でcmakeがVS18系のcl 14.51を検出し、`include/display-diff.h::clearFrame` の`uint32_t→uint16_t` narrowingが`/WX`で誤りになったため引数を`uint16_t`へ修正した。
 
 ## 直接認証の調査資料

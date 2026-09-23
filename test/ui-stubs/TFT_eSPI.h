@@ -52,7 +52,16 @@ class TFT_eSPI {
       if ((data[row * ((width + 7) / 8) + col / 8] >> (7 - col % 8)) & 1)
         drawPixel(x + col, y + row, color);
   }
-  void drawRect(int, int, int, int, uint16_t) { ++ui::missing; ++ui::glyphCount; }
+  void drawRect(int x, int y, int width, int height, uint16_t color) {
+    for (int col = 0; col < width; ++col) {
+      drawPixel(x + col, y, color);
+      if (height > 1) drawPixel(x + col, y + height - 1, color);
+    }
+    for (int row = 1; row + 1 < height; ++row) {
+      drawPixel(x, y + row, color);
+      if (width > 1) drawPixel(x + width - 1, y + row, color);
+    }
+  }
  protected:
   int width_ = 240, height_ = 320;
 };

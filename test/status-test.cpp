@@ -21,9 +21,11 @@ int main() {
   // 期限間近・期限切れ後は短間隔、リニュー後は通常間隔へ戻る。
   const uint64_t now = 1700000000000;
   assert(!povo::isCritical(0, now));
-  assert(povo::pollIntervalMs(0, now) == povo::kNormalPollMs);
+  assert(povo::pollIntervalMs(0, now) == povo::kDefaultPollSec * 1000);
   assert(!povo::isCritical(now + 3600000, now));
-  assert(povo::pollIntervalMs(now + 3600000, now) == povo::kNormalPollMs);
+  assert(povo::pollIntervalMs(now + 3600000, now) == povo::kDefaultPollSec * 1000);
+  assert(povo::pollIntervalMs(now + 3600000, now, 120000) == 120000);
+  assert(povo::pollIntervalMs(now + 1800000, now, 120000) == povo::kCriticalPollMs);
   assert(povo::isCritical(now + 1800000, now));
   assert(povo::isCritical(now + 60000, now));
   assert(povo::isCritical(now, now));

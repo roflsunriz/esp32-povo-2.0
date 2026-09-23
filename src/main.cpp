@@ -47,7 +47,7 @@ void setup() {
   beginDisplay();
   loadSpan();
   configured = strlen(POVO_WIFI_SSID) && strlen(POVO_ROOT_CA);
-  if (!configured) { drawDisplay(nullptr, 0, povo::text::configuring); return; }
+  if (!configured) { drawDisplay(nullptr, 0, povo::text::configuring, 0, false); return; }
   WiFi.mode(WIFI_STA); WiFi.setAutoReconnect(true);
   WiFi.begin(POVO_WIFI_SSID, POVO_WIFI_PASSWORD);
   configTime(0, 0, POVO_NTP_SERVER);
@@ -79,6 +79,9 @@ void loop() {
     } else if (started && !portalActive() && now >= nextPoll) {
       const uint64_t clockMs = static_cast<uint64_t>(time(nullptr)) * 1000;
       const uint64_t knownExpiry = haveStatus ? status.expiryAtMs : savedExpiryMs;
+      if (displayAwake())
+        drawDisplay(haveStatus ? &status : nullptr, haveStatus ? ms() - receivedAt : 0,
+                    failure, 0, true);
       client.setCritical(povo::isCritical(knownExpiry, clockMs));
       std::string body;
       povo::Status candidate;
@@ -97,13 +100,15 @@ void loop() {
       // リニュー後は期限が遠のき通常間隔へ自動復帰する。取得失敗時も
       // 重点期間中は短間隔で再試行し、低速回線での取りこぼしを補う。
       const uint64_t afterExpiry = haveStatus ? status.expiryAtMs : 0;
-      nextPoll = ms() + povo::pollIntervalMs(afterExpiry, clockMs);
+      nextPoll = ms() + povo::pollIntervalMs(afterExpiry, clockMs,
+                                             pollIntervalSec() * 1000);
       nextDraw = 0;
     }
   }
   if (!portalActive() && displayAwake() && now >= nextDraw) {
-    drawDisplay(haveStatus ? &status : nullptr, haveStatus ? ms() - receivedAt : 0, failure);
-    nextDraw = ms() + 60000;
+    drawDisplay(haveStatus ? &status : nullptr, haveStatus ? ms() - receivedAt : 0, failure,
+                nextPoll > now ? nextPoll - now : 0, false);
+    nextDraw = ms() + 10000;
   }
   delay(5);
 }

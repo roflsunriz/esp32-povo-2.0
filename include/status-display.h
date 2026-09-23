@@ -3,7 +3,10 @@
 #include "display-settings.h"
 #include "status-model.h"
 void beginDisplay();
-void drawDisplay(const povo::Status* status, uint64_t elapsedMs, const char* error);
+void drawDisplay(const povo::Status* status, uint64_t elapsedMs, const char* error,
+                 uint64_t nextPollInMs, bool fetching);
+uint32_t sleepTimeout();
+uint32_t pollIntervalSec();
 void drawSetup(const char* ssid, const char* password);
 // タブ・タッチ・BOOT・自動消灯。設定画面表示中はtrueを返す。
 void pollDisplayInput(uint64_t nowMs);

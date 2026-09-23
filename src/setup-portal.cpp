@@ -73,7 +73,7 @@ void beginPortal(povo::Client& client) {
   const String ssid = String("povo-setup-") + randomText(4);
   WiFi.mode(WIFI_AP_STA);
   if (!WiFi.softAP(ssid.c_str(), password.c_str(), 1, false, 1)) {
-    drawDisplay(nullptr, 0, povo::text::portalError); return;
+    drawDisplay(nullptr, 0, povo::text::portalError, 0, false); return;
   }
   const char* headers[] = {"X-Setup-Token"};
   server.collectHeaders(headers, 1);

@@ -4,8 +4,9 @@
 namespace povo {
 constexpr uint64_t kStaleMs = 900000;
 constexpr uint64_t kMaxTimestamp = 253402300799999ULL;
-// 通常の期限取得間隔（5分）と、期限間近・期限切れ後の短い取得間隔（1分）。
-constexpr uint64_t kNormalPollMs = 300000;
+// 通常の期限取得間隔はNVSの取得間隔設定（秒）に従い、期限間近・期限切れ
+// 後は短い取得間隔（1分）で追う。旧記録に設定がない場合は5分を使う。
+constexpr uint64_t kDefaultPollSec = 300;
 constexpr uint64_t kCriticalPollMs = 60000;
 // 期限間近とみなす残り時間。使い放題の最終盤と切替直後を短間隔で追う。
 constexpr uint64_t kNearExpiryMs = 1800000;
@@ -37,8 +38,9 @@ inline bool isCritical(uint64_t expiryAtMs, uint64_t nowMs) {
   if (expiryAtMs <= nowMs) return true;
   return expiryAtMs - nowMs <= kNearExpiryMs;
 }
-inline uint64_t pollIntervalMs(uint64_t expiryAtMs, uint64_t nowMs) {
-  return isCritical(expiryAtMs, nowMs) ? kCriticalPollMs : kNormalPollMs;
+inline uint64_t pollIntervalMs(uint64_t expiryAtMs, uint64_t nowMs,
+                               uint64_t normalMs = kDefaultPollSec * 1000) {
+  return isCritical(expiryAtMs, nowMs) ? kCriticalPollMs : normalMs;
 }
 // カバレッジのリニュー（期限の後ろ倒し）を検出する。通常間隔への復帰条件。
 inline bool isRenewed(uint64_t oldExpiryAtMs, uint64_t newExpiryAtMs) {

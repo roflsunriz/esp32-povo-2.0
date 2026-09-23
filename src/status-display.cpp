@@ -38,8 +38,14 @@ constexpr char kSettingsStore[] = "povo-display";
 
 struct State {
   Page page = Page::Status;
-  size_t timeoutIndex = 0;
-  size_t sleepPage = 0;
+  uint32_t sleepSec = 0;
+  uint32_t pollSec = 300;
+  int sleepScroll = 0;
+  // Whole-content drag gesture fixed at contact start.
+  int dragMode = 0;  // 0 none, 1 minutes, 2 hours, 3 poll, 4 scroll
+  int dragStartX = 0;
+  int dragStartY = 0;
+  int dragStartScroll = 0;
   bool inverted = false;
   bool awake = true;
   bool dirty = false;
@@ -51,6 +57,8 @@ struct State {
   povo::Status cachedStatus;
   bool haveCached = false;
   uint64_t cachedElapsedMs = 0;
+  uint64_t cachedNextPollInMs = 0;
+  bool cachedFetching = false;
   char cachedError[128] = {};
   bool haveError = false;
   povo::touch::Calibration calibration;
@@ -128,13 +136,17 @@ void setAwakeLocked(bool awake) {
   applyBacklight();
 }
 void loadSettings() {
-  state.timeoutIndex = 0;
+  state.sleepSec = 0;
+  state.pollSec = 300;
+  state.sleepScroll = 0;
+  state.dragMode = 0;
   state.inverted = false;
   state.calibration = {};
 #ifdef ARDUINO
   Preferences prefs;
   if (!prefs.begin(kSettingsStore, true)) return;
   const uint32_t seconds = prefs.getUInt("sleep_sec", 0);
+  const uint32_t poll = prefs.getUInt("poll_sec", 300);
   state.inverted = prefs.getBool("inverted", false);
   povo::touch::StoredCalibration stored = {};
   if (prefs.getBytesLength("touch_calib") == sizeof(stored) &&
@@ -142,8 +154,8 @@ void loadSettings() {
     povo::touch::decode(stored, state.calibration);
   }
   prefs.end();
-  for (size_t i = 0; i < povo::display::kSleepTimeoutCount; ++i)
-    if (povo::display::kSleepTimeoutOptions[i] == seconds) { state.timeoutIndex = i; break; }
+  if (povo::display::isValidSleepTimeout(seconds)) state.sleepSec = seconds;
+  if (povo::display::isValidPollSlider(poll)) state.pollSec = poll;
 #endif
 }
 void saveSettings() {
@@ -151,7 +163,8 @@ void saveSettings() {
   Preferences prefs;
   if (!prefs.begin(kSettingsStore, false)) return;
   prefs.putUInt("version", 2);
-  prefs.putUInt("sleep_sec", povo::display::timeoutForIndex(state.timeoutIndex));
+  prefs.putUInt("sleep_sec", state.sleepSec);
+  prefs.putUInt("poll_sec", state.pollSec);
   prefs.putBool("inverted", state.inverted);
   prefs.end();
 #endif
@@ -181,7 +194,8 @@ void drawTabs() {
   lineAt(64, kTabY + 4, povo::text::tabStatus, statusSelected ? bg : fg);
   lineAt(208, kTabY + 4, povo::text::tabSleep, statusSelected ? fg : bg);
 }
-void drawStatusPage(const povo::Status* status, uint64_t elapsedMs, const char* error) {
+void drawStatusPage(const povo::Status* status, uint64_t elapsedMs, const char* error,
+                      uint64_t nextPollInMs, bool fetching) {
   using namespace povo;
   line(6, text::title, accent);
   if (!status) {
@@ -212,7 +226,27 @@ void drawStatusPage(const povo::Status* status, uint64_t elapsedMs, const char* 
   line(112, text::directMode);
   if (v.confirmationPending) line(132, text::pending, accent);
   line(150, text::precision);
-  snprintf(buffer, sizeof(buffer), text::sync, (unsigned long long)(v.syncAgeMs / 60000)); line(168, buffer);
+  if (error) line(168, error, accent);
+  else if (fetching) line(168, text::fetchingText, accent);
+  else if (nextPollInMs > 0) {
+    String combined;
+    {
+      char syncPart[64];
+      snprintf(syncPart, sizeof(syncPart), text::sync,
+               (unsigned long long)(v.syncAgeMs / 60000));
+      combined = syncPart;
+    }
+    char nextPart[64];
+    snprintf(nextPart, sizeof(nextPart), text::nextPoll,
+             (unsigned long long)(nextPollInMs / 60000),
+             (unsigned long long)(nextPollInMs / 1000 % 60));
+    combined += " ";
+    combined += nextPart;
+    line(168, combined.c_str());
+  }
+  else {
+    snprintf(buffer, sizeof(buffer), text::sync, (unsigned long long)(v.syncAgeMs / 60000)); line(168, buffer);
+  }
   if (error) line(188, error, accent);
   else if (!canvasReady) line(188, text::displayMemoryError, accent);
   else if (v.stale) line(188, text::stale, accent);
@@ -220,31 +254,62 @@ void drawStatusPage(const povo::Status* status, uint64_t elapsedMs, const char* 
 }
 void drawSleepPage() {
   using namespace povo::display;
-  char cell[32], current[32], title[96], made[96];
-  formatTimeout(timeoutForIndex(state.timeoutIndex), current, sizeof(current));
-  snprintf(title, sizeof(title), "%s %u/%u", povo::text::sleepTitle,
-           static_cast<unsigned>(state.sleepPage + 1),
-           static_cast<unsigned>(sleepPageCount()));
-  line(6, title, accent);
-  snprintf(made, sizeof(made), "%s %s", povo::text::sleepNow, current);
-  line(30, made, accent);
-  line(48, povo::text::sleepSelect);
-  for (int row = 0; row < kSleepRows; ++row) {
-    for (int col = 0; col < kSleepCols; ++col) {
-      const size_t index =
-          state.sleepPage * kSleepPerPage + static_cast<size_t>(row * kSleepCols + col);
-      if (index >= kSleepTimeoutCount) continue;
-      const int left = kGridColX[col], top = kGridTop + row * kGridRowH;
-      const bool selected = index == state.timeoutIndex;
-      drawing->fillRect(left, top, kGridCellW, kGridCellH, selected ? accent : panel);
-      formatTimeout(timeoutForIndex(index), cell, sizeof(cell));
-      lineAt(left + 6, top + 4, cell, selected ? bg : fg);
-    }
-  }
-  drawing->fillRect(4, kNavY, 152, kNavH, panel);
-  drawing->fillRect(164, kNavY, 152, kNavH, panel);
-  lineAt(64, kNavY + 2, povo::text::sleepPrev, fg);
-  lineAt(224, kNavY + 2, povo::text::sleepNext, fg);
+  const int scroll = clampSleepScroll(state.sleepScroll);
+  auto visibleY = [scroll](int y) { return y - scroll; };
+  auto drawRow = [&](int y, const char* text, uint16_t color = fg) {
+    const int visible = visibleY(y);
+    if (visible < kSleepVisibleTop || visible > kSleepVisibleBottom - 16)
+      return;
+    line(visible, text, color);
+  };
+  auto drawTrack = [&](int centerY, uint32_t value, uint32_t minV,
+                       uint32_t maxV) {
+    const int y = visibleY(centerY);
+    // タブと見出しの領域へはみ出さない。
+    if (y < kSleepVisibleTop + 8 || y > kSleepVisibleBottom - 8) return;
+    drawing->drawRect(kSliderX0, y - 2, kSliderX1 - kSliderX0, 5, fg);
+    const int thumbX = sliderXFromValue(value, minV, maxV);
+    if (thumbX > kSliderX0)
+      drawing->fillRect(kSliderX0, y - 2, thumbX - kSliderX0, 5, accent);
+    drawing->fillRect(thumbX - 6, y - 6, 12, 13, fg);
+    drawing->fillRect(thumbX - 4, y - 4, 8, 9, panel);
+  };
+  char combined[48] = {};
+  const uint32_t minutes = sleepMinutesPart(state.sleepSec);
+  const uint32_t hours = sleepHoursPart(state.sleepSec);
+  if (state.sleepSec == 0)
+    snprintf(combined, sizeof(combined), "%s", povo::text::sleepAlwaysOn);
+  else
+    snprintf(combined, sizeof(combined), povo::text::sleepCombined,
+             static_cast<unsigned>(hours), static_cast<unsigned>(minutes));
+  line(6, povo::text::sleepTitle, accent);
+  char title[64];
+  snprintf(title, sizeof(title), "%s", combined);
+  drawRow(32, title, fg);
+  char label[48];
+  snprintf(label, sizeof(label), povo::text::sleepMinutesLabel,
+           static_cast<unsigned>(minutes));
+  drawRow(52, label, fg);
+  drawTrack(kSliderMinutesY, minutes, 0, kSleepMinutesMax);
+  snprintf(label, sizeof(label), povo::text::sleepHoursLabel,
+           static_cast<unsigned>(hours));
+  drawRow(100, label, fg);
+  drawTrack(kSliderHoursY, hours, 0, kSleepHoursMax);
+  snprintf(label, sizeof(label), povo::text::sleepPollLabel,
+           static_cast<unsigned>(state.pollSec));
+  drawRow(148, label, fg);
+  drawTrack(kSliderPollY, state.pollSec, kPollSliderMinSec, kPollSliderMaxSec);
+  drawRow(194, povo::text::sleepAlwaysNote, fg);
+  // 右端のスクロールバーは固定表示。
+  const int trackH = kSleepScrollBarY1 - kSleepScrollBarY0;
+  const int thumbH = (kSleepVisibleBottom - kSleepVisibleTop) * trackH /
+                     kSleepContentH;
+  const int travel = trackH - thumbH;
+  const int thumbY = travel <= 0 || kSleepScrollMax <= 0
+                         ? kSleepScrollBarY0
+                         : kSleepScrollBarY0 + scroll * travel / kSleepScrollMax;
+  drawing->drawRect(kSleepScrollBarX0, kSleepScrollBarY0, 12, trackH, panel);
+  drawing->fillRect(kSleepScrollBarX0 + 2, thumbY, 8, thumbH, fg);
 }
 void redrawFromCache() {
   if (!state.awake) return;
@@ -252,7 +317,8 @@ void redrawFromCache() {
   display_diff::clearFrame(*drawing, bg);
   if (state.page == Page::Sleep) drawSleepPage();
   else drawStatusPage(state.haveCached ? &state.cachedStatus : nullptr,
-                      state.cachedElapsedMs, state.haveError ? state.cachedError : nullptr);
+                      state.cachedElapsedMs, state.haveError ? state.cachedError : nullptr,
+                      state.cachedNextPollInMs, state.cachedFetching);
   drawTabs();
   if (canvasReady) {
     const uint16_t changed = bandDiff.update(
@@ -377,7 +443,6 @@ void calibrateTouch() {
 }
 void beginDisplay() {
   loadSettings();
-  state.sleepPage = povo::display::sleepPageForIndex(state.timeoutIndex);
   tft.init();
   applyRotation();
   canvas.setColorDepth(8);
@@ -394,10 +459,13 @@ void beginDisplay() {
   touch.setPressureThreshold(state.calibration.pressure);
 #endif
 }
-void drawDisplay(const povo::Status* status, uint64_t elapsedMs, const char* error) {
+void drawDisplay(const povo::Status* status, uint64_t elapsedMs, const char* error,
+                   uint64_t nextPollInMs, bool fetching) {
   if (status) { state.cachedStatus = *status; state.haveCached = true; }
   else state.haveCached = false;
   state.cachedElapsedMs = elapsedMs;
+  state.cachedNextPollInMs = nextPollInMs;
+  state.cachedFetching = fetching;
   if (error) {
     snprintf(state.cachedError, sizeof(state.cachedError), "%s", error);
     state.haveError = true;
@@ -441,52 +509,168 @@ void pollDisplayInput(uint64_t nowMs) {
   }
   povo::display::Point point;
   const bool touched = readTouchHardware(point);
+  const bool contactStart = touched && !state.wasTouched;
   const bool tap = touched && !state.wasTouched &&
                    (nowMs - state.lastTapMs >= kTapMinIntervalMs || state.lastTapMs == 0);
   state.wasTouched = touched;
+  if (!touched) {
+    state.dragMode = 0;
+    if (!tap) return;
+  }
+  if (!tap && !touched) return;
+  if (contactStart) {
+    // 接触開始点で操作種別を固定する。タブ上は切替専用で変化させない。
+    // タップ間隔でタップ自体が抑止されてもドラッグは追従する。
+    state.dragMode = 0;
+    state.dragStartX = point.x;
+    state.dragStartY = point.y;
+    state.dragStartScroll = povo::display::clampSleepScroll(state.sleepScroll);
+    Page startTab;
+    if (!povo::display::tabForTouch(point.x, point.y, startTab) &&
+        state.awake && state.page == Page::Sleep) {
+      const int startContentY =
+          point.y + povo::display::clampSleepScroll(state.sleepScroll);
+      state.dragMode = 4;
+      if (point.x >= 16 && point.x <= 283) {
+        if (startContentY >= povo::display::kSliderMinutesY - povo::display::kSliderHalfH &&
+            startContentY < povo::display::kSliderMinutesY + povo::display::kSliderHalfH)
+          state.dragMode = 1;
+        else if (startContentY >= povo::display::kSliderHoursY - povo::display::kSliderHalfH &&
+                 startContentY < povo::display::kSliderHoursY + povo::display::kSliderHalfH)
+          state.dragMode = 2;
+        else if (startContentY >= povo::display::kSliderPollY - povo::display::kSliderHalfH &&
+                 startContentY < povo::display::kSliderPollY + povo::display::kSliderHalfH)
+          state.dragMode = 3;
+      }
+    }
+  }
+  if (!tap && !contactStart) {
+    // 接触継続中のドラッグ。Sleepタブでは同種別の操作だけを追従する。
+    if (state.awake && state.page == Page::Sleep && state.dragMode != 0) {
+      state.lastActivityMs = nowMs;
+      if (state.dragMode == 4) {
+        const int delta = state.dragStartY - point.y;
+        if (delta < 6 && delta > -6) return;
+        const int target = povo::display::clampSleepScroll(state.dragStartScroll + delta);
+        if (target != povo::display::clampSleepScroll(state.sleepScroll)) {
+          state.sleepScroll = target;
+          redrawFromCache();
+        }
+        return;
+      }
+      if (point.x < 16 || point.x > 283) return;
+      if (state.dragMode == 1) {
+        const uint32_t minutes = povo::display::sliderValueFromX(
+            point.x, 0, povo::display::kSleepMinutesMax, 1);
+        if (minutes != povo::display::sleepMinutesPart(state.sleepSec)) {
+          state.sleepSec = povo::display::sleepTimeoutFromParts(
+              minutes, povo::display::sleepHoursPart(state.sleepSec));
+          saveSettings();
+          redrawFromCache();
+        }
+      } else if (state.dragMode == 2) {
+        const uint32_t hours = povo::display::sliderValueFromX(
+            point.x, 0, povo::display::kSleepHoursMax, 1);
+        if (hours != povo::display::sleepHoursPart(state.sleepSec)) {
+          state.sleepSec = povo::display::sleepTimeoutFromParts(
+              povo::display::sleepMinutesPart(state.sleepSec), hours);
+          saveSettings();
+          redrawFromCache();
+        }
+      } else if (state.dragMode == 3) {
+        const uint32_t poll = povo::display::sliderValueFromX(
+            point.x, povo::display::kPollSliderMinSec,
+            povo::display::kPollSliderMaxSec,
+            povo::display::kPollSliderStepSec);
+        if (poll != state.pollSec) {
+          state.pollSec = poll;
+          saveSettings();
+          redrawFromCache();
+        }
+      }
+    }
+    return;
+  }
   if (!tap) return;
   state.lastTapMs = nowMs;
   state.lastActivityMs = nowMs;
   if (!state.awake) {
     setAwakeLocked(true);
     state.wasTouched = true; // 復帰に使った接触は離すまで操作へ流さない。
+    state.dragMode = 0;
     redrawFromCache(); return;
   }
   Page tab;
   if (povo::display::tabForTouch(point.x, point.y, tab)) {
     if (tab != state.page) {
       state.page = tab;
-      if (tab == Page::Sleep)
-        state.sleepPage = povo::display::sleepPageForIndex(state.timeoutIndex);
+      state.dragMode = 0;
       redrawFromCache();
     }
     return;
   }
   if (state.page != Page::Sleep) return;
-  size_t index = 0;
-  if (povo::display::sleepCellForTouch(point.x, point.y, state.sleepPage, index)) {
-    if (index != state.timeoutIndex) {
-      state.timeoutIndex = index;
+  const int scroll = povo::display::clampSleepScroll(state.sleepScroll);
+  const int contentY = point.y + scroll;
+  // スクロールバーは指位置へ比例移動する。
+  if (point.x >= 281 && point.y >= povo::display::kSleepScrollBarY0 &&
+      point.y < povo::display::kSleepScrollBarY1) {
+    state.sleepScroll = povo::display::sleepScrollFromTrackY(point.y);
+    state.dragMode = 4;
+    redrawFromCache();
+    return;
+  }
+  state.dragMode = 4;
+  uint32_t minutes = povo::display::sleepMinutesPart(state.sleepSec);
+  uint32_t hours = povo::display::sleepHoursPart(state.sleepSec);
+  bool timeoutTouched = false;
+  if (point.x >= 16 && point.x <= 283) {
+    if (contentY >= povo::display::kSliderMinutesY - povo::display::kSliderHalfH &&
+        contentY < povo::display::kSliderMinutesY + povo::display::kSliderHalfH) {
+      minutes = povo::display::sliderValueFromX(point.x, 0,
+                                                povo::display::kSleepMinutesMax, 1);
+      state.dragMode = 1;
+      timeoutTouched = true;
+    } else if (contentY >= povo::display::kSliderHoursY - povo::display::kSliderHalfH &&
+               contentY < povo::display::kSliderHoursY + povo::display::kSliderHalfH) {
+      hours = povo::display::sliderValueFromX(point.x, 0,
+                                              povo::display::kSleepHoursMax, 1);
+      state.dragMode = 2;
+      timeoutTouched = true;
+    } else if (contentY >= povo::display::kSliderPollY - povo::display::kSliderHalfH &&
+               contentY < povo::display::kSliderPollY + povo::display::kSliderHalfH) {
+      const uint32_t poll = povo::display::sliderValueFromX(
+          point.x, povo::display::kPollSliderMinSec,
+          povo::display::kPollSliderMaxSec,
+          povo::display::kPollSliderStepSec);
+      if (poll != state.pollSec) {
+        state.pollSec = poll;
+        saveSettings();
+      }
+      state.dragMode = 3;
+      redrawFromCache();
+      return;
+    }
+  }
+  if (timeoutTouched) {
+    const uint32_t total =
+        povo::display::sleepTimeoutFromParts(minutes, hours);
+    if (total != state.sleepSec) {
+      state.sleepSec = total;
       saveSettings();
     }
     redrawFromCache();
     return;
   }
-  bool prev = false;
-  if (povo::display::sleepNavForTouch(point.x, point.y, prev)) {
-    const size_t count = povo::display::sleepPageCount();
-    state.sleepPage = prev ? (state.sleepPage + count - 1) % count
-                           : (state.sleepPage + 1) % count;
-    redrawFromCache();
-  }
+  // 空白タップはスクロール開始点だけを確定する。
+  redrawFromCache();
 #else
   (void)nowMs;
 #endif
 }
 void updateDisplayPower(uint64_t nowMs) {
   if (!state.awake) return;
-  const uint32_t timeout = povo::display::timeoutForIndex(state.timeoutIndex);
-  if (povo::display::shouldSleep(timeout, nowMs - state.lastActivityMs))
+  if (povo::display::shouldSleep(state.sleepSec, nowMs - state.lastActivityMs))
     setAwakeLocked(false);
 }
 bool displayAwake() { return state.awake; }
@@ -494,24 +678,38 @@ povo::display::Page displayPage() { return state.page; }
 void setDisplayPage(povo::display::Page page) {
   if (state.page == page) return;
   state.page = page;
-  if (page == Page::Sleep)
-    state.sleepPage = povo::display::sleepPageForIndex(state.timeoutIndex);
+  state.dragMode = 0;
   state.dirty = true;
   redrawFromCache();
 }
 bool setSleepTimeout(uint32_t seconds) {
-  for (size_t i = 0; i < povo::display::kSleepTimeoutCount; ++i) {
-    if (povo::display::kSleepTimeoutOptions[i] != seconds) continue;
-    state.timeoutIndex = i;
-    state.sleepPage = povo::display::sleepPageForIndex(i);
-    saveSettings();
+  if (!povo::display::isValidSleepTimeout(seconds)) return false;
+  if (seconds == state.sleepSec) {
     state.dirty = true;
     redrawFromCache();
     return true;
   }
-  return false;
+  state.sleepSec = seconds;
+  saveSettings();
+  state.dirty = true;
+  redrawFromCache();
+  return true;
 }
-uint32_t sleepTimeout() { return povo::display::timeoutForIndex(state.timeoutIndex); }
+uint32_t sleepTimeout() { return state.sleepSec; }
+uint32_t pollIntervalSec() { return state.pollSec; }
+bool setPollIntervalSec(uint32_t seconds) {
+  if (!povo::display::isValidPollSlider(seconds)) return false;
+  if (seconds == state.pollSec) {
+    state.dirty = true;
+    redrawFromCache();
+    return true;
+  }
+  state.pollSec = seconds;
+  saveSettings();
+  state.dirty = true;
+  redrawFromCache();
+  return true;
+}
 void toggleDisplayRotation() {
   state.inverted = !state.inverted;
   saveSettings();

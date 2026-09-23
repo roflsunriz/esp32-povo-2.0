@@ -10,15 +10,39 @@ namespace display {
 
 enum class Page : uint8_t { Status = 0, Sleep = 1 };
 
-// なし、15秒、30秒、1分、2分、5分、10分、30分、1時間、2時間〜24時間（1時間刻み）。
-constexpr uint32_t kSleepTimeoutOptions[] = {
-    0,    15,   30,   60,   120,  300,  600,  1800, 3600, 7200,
-    10800, 14400, 18000, 21600, 25200, 28800, 32400, 36000, 39600, 43200,
-    46800, 50400, 54000, 57600, 61200, 64800, 68400, 72000, 75600, 79200,
-    82800, 86400,
-};
-constexpr size_t kSleepTimeoutCount =
-    sizeof(kSleepTimeoutOptions) / sizeof(kSleepTimeoutOptions[0]);
+// 自動消灯スライダー: 0〜59分＋0〜24時間。合計は 時*3600＋分*60（秒）で、
+// 0分0時間は自動消灯オフ（常時点灯）と同じ。取得間隔スライダーは
+// 60〜600秒の60秒刻み。旧固定値の15秒・30秒は保存互換のため有効のまま。
+constexpr uint32_t kSleepMinutesMax = 59;
+constexpr uint32_t kSleepHoursMax = 24;
+constexpr uint32_t kSleepTimeoutMaxSec = 24 * 3600 + 59 * 60;  // 89940
+constexpr uint32_t kPollSliderMinSec = 60;
+constexpr uint32_t kPollSliderMaxSec = 600;
+constexpr uint32_t kPollSliderStepSec = 60;
+
+inline uint32_t sleepMinutesPart(uint32_t timeoutSec) {
+  return (timeoutSec % 3600) / 60;
+}
+
+inline uint32_t sleepHoursPart(uint32_t timeoutSec) {
+  return timeoutSec / 3600;
+}
+
+inline uint32_t sleepTimeoutFromParts(uint32_t minutes, uint32_t hours) {
+  if (minutes > kSleepMinutesMax) minutes = kSleepMinutesMax;
+  if (hours > kSleepHoursMax) hours = kSleepHoursMax;
+  return hours * 3600 + minutes * 60;
+}
+
+inline bool isValidSleepTimeout(uint32_t seconds) {
+  if (seconds == 15 || seconds == 30) return true;
+  return seconds <= kSleepTimeoutMaxSec && seconds % 60 == 0;
+}
+
+inline bool isValidPollSlider(uint32_t seconds) {
+  return seconds >= kPollSliderMinSec && seconds <= kPollSliderMaxSec &&
+         seconds % kPollSliderStepSec == 0;
+}
 
 constexpr int kScreenW = 320;
 constexpr int kScreenH = 240;
@@ -39,18 +63,23 @@ inline int barFillWidth(int totalWidth, uint64_t permille) {
   return static_cast<int>(static_cast<uint64_t>(totalWidth) * permille / 1000);
 }
 
-// 設定グリッド: 3列×4行=12件/ページ。32件で3ページ。
-constexpr int kSleepCols = 3;
-constexpr int kSleepRows = 4;
-constexpr size_t kSleepPerPage =
-    static_cast<size_t>(kSleepCols * kSleepRows);
-constexpr int kGridTop = 66;
-constexpr int kGridRowH = 30;
-constexpr int kGridCellH = 24;
-constexpr int kGridColX[kSleepCols] = {4, 110, 216};
-constexpr int kGridCellW = 100;
-constexpr int kNavY = 188;
-constexpr int kNavH = 20;
+// 設定タブのスライダー配置（内容座標）。タッチ面は x 24..295・y 24..215
+// のため、操作子はその範囲へ収める。内容は kSleepContentH まであり、
+// 表示域を超えた分だけスクロールする。
+constexpr int kSliderX0 = 24;
+constexpr int kSliderX1 = 275;
+constexpr int kSliderMinutesY = 78;
+constexpr int kSliderHoursY = 126;
+constexpr int kSliderPollY = 174;
+constexpr int kSliderHalfH = 14;
+constexpr int kSleepContentH = 224;
+constexpr int kSleepVisibleTop = 24;
+constexpr int kSleepVisibleBottom = 210;
+constexpr int kSleepScrollMax =
+    kSleepContentH - (kSleepVisibleBottom - kSleepVisibleTop);
+constexpr int kSleepScrollBarX0 = 283;
+constexpr int kSleepScrollBarY0 = 28;
+constexpr int kSleepScrollBarY1 = 210;
 
 constexpr uint8_t kRotationNormal = 1;
 constexpr uint8_t kRotationInverted = 3;
@@ -73,73 +102,54 @@ struct BootFilter {
   bool armed = true;
 };
 
-inline size_t indexForTimeout(uint32_t seconds) {
-  for (size_t i = 0; i < kSleepTimeoutCount; ++i)
-    if (kSleepTimeoutOptions[i] == seconds) return i;
-  return 0;
+inline int clampSleepScroll(int scroll) {
+  if (scroll < 0) return 0;
+  if (scroll > kSleepScrollMax) return kSleepScrollMax;
+  return scroll;
 }
 
-inline uint32_t timeoutForIndex(size_t index) {
-  if (index >= kSleepTimeoutCount) index = kSleepTimeoutCount - 1;
-  return kSleepTimeoutOptions[index];
+// タップ位置からスライダー値を求める。端は丸めて段階値へ寄せる。
+inline uint32_t sliderValueFromX(int x, uint32_t minV, uint32_t maxV,
+                                 uint32_t step) {
+  if (maxV <= minV || step == 0) return minV;
+  if (x < kSliderX0) x = kSliderX0;
+  if (x > kSliderX1) x = kSliderX1;
+  const uint32_t trackW = static_cast<uint32_t>(kSliderX1 - kSliderX0);
+  const uint32_t offset = static_cast<uint32_t>(x - kSliderX0);
+  const uint32_t range = maxV - minV;
+  const uint32_t steps = range / step;
+  uint32_t index = (offset * steps + trackW / 2) / trackW;
+  if (index > steps) index = steps;
+  return minV + index * step;
 }
 
-inline size_t sleepPageCount() {
-  return (kSleepTimeoutCount + kSleepPerPage - 1) / kSleepPerPage;
+inline int sliderXFromValue(uint32_t value, uint32_t minV, uint32_t maxV) {
+  if (maxV <= minV) return kSliderX0;
+  if (value < minV) value = minV;
+  if (value > maxV) value = maxV;
+  const uint32_t trackW = static_cast<uint32_t>(kSliderX1 - kSliderX0);
+  const uint32_t range = maxV - minV;
+  return kSliderX0 +
+         static_cast<int>((static_cast<uint64_t>(value - minV) * trackW +
+                           range / 2) /
+                          range);
 }
 
-inline size_t sleepPageForIndex(size_t index) { return index / kSleepPerPage; }
-
-// 日本語表記。「なし」、15秒、30秒、1分、2分、5分、10分、30分、1時間〜24時間。
-// 単位の正本はui-text.h。字形生成も同ファイル基準。
-inline bool formatTimeout(uint32_t seconds, char* out, size_t size) {
-  if (!out || !size) return false;
-  if (seconds == 0) {
-    snprintf(out, size, "%s", povo::text::sleepNone);
-    return true;
-  }
-  if (seconds < 60) {
-    snprintf(out, size, "%u%s", static_cast<unsigned>(seconds), povo::text::sleepSecUnit);
-    return true;
-  }
-  if (seconds < 3600) {
-    snprintf(out, size, "%u%s", static_cast<unsigned>(seconds / 60),
-             povo::text::sleepMinUnit);
-    return true;
-  }
-  snprintf(out, size, "%u%s", static_cast<unsigned>(seconds / 3600),
-           povo::text::sleepHourUnit);
-  return true;
+// スクロールバーの指位置から offset を求める。つまみ中央合わせ。
+inline int sleepScrollFromTrackY(int y) {
+  const int trackH = kSleepScrollBarY1 - kSleepScrollBarY0;
+  const int thumbH = (kSleepVisibleBottom - kSleepVisibleTop) * trackH /
+                     kSleepContentH;
+  const int travel = trackH - thumbH;
+  if (travel <= 0 || kSleepScrollMax <= 0) return 0;
+  const int offset =
+      (y - thumbH / 2 - kSleepScrollBarY0) * kSleepScrollMax / travel;
+  return clampSleepScroll(offset);
 }
 
 inline bool tabForTouch(int x, int y, Page& out) {
   if (x < 0 || x >= kScreenW || y < kTabY || y >= kScreenH) return false;
   out = x < kScreenW / 2 ? Page::Status : Page::Sleep;
-  return true;
-}
-
-inline bool sleepCellForTouch(int x, int y, size_t page, size_t& outIndex) {
-  if (page >= sleepPageCount()) return false;
-  for (int row = 0; row < kSleepRows; ++row) {
-    const int top = kGridTop + row * kGridRowH;
-    if (y < top || y >= top + kGridCellH) continue;
-    for (int col = 0; col < kSleepCols; ++col) {
-      const int left = kGridColX[col];
-      if (x < left || x >= left + kGridCellW) continue;
-      const size_t index = page * kSleepPerPage +
-                           static_cast<size_t>(row * kSleepCols + col);
-      if (index >= kSleepTimeoutCount) return false;
-      outIndex = index;
-      return true;
-    }
-  }
-  return false;
-}
-
-// 設定画面の前へ/次へボタン。left=trueで前へ領域、falseで次へ領域。
-inline bool sleepNavForTouch(int x, int y, bool& outPrev) {
-  if (x < 0 || x >= kScreenW || y < kNavY || y >= kNavY + kNavH) return false;
-  outPrev = x < kScreenW / 2;
   return true;
 }
 

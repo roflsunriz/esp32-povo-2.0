@@ -10,60 +10,44 @@ namespace {
 void check(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
-void checkFormat(uint32_t seconds, const char* expected) {
-  char buffer[32];
-  check(povo::display::formatTimeout(seconds, buffer, sizeof(buffer)), "format failed");
-  check(std::strcmp(buffer, expected) == 0, buffer);
-}
 }  // namespace
 int main() {
   using namespace povo::display;
   try {
-    check(kSleepTimeoutCount == 32, "timeout option count");
-    check(kSleepTimeoutOptions[0] == 0, "first option none");
-    check(kSleepTimeoutOptions[8] == 3600, "1 hour option");
-    check(kSleepTimeoutOptions[kSleepTimeoutCount - 1] == 86400, "last option 24 hours");
-    for (size_t i = 9; i < kSleepTimeoutCount; ++i)
-      check(kSleepTimeoutOptions[i] - kSleepTimeoutOptions[i - 1] == 3600, "hourly steps");
-    check(indexForTimeout(0) == 0, "index none");
-    check(indexForTimeout(15) == 1, "index 15s");
-    check(indexForTimeout(1800) == 7, "index 30m");
-    check(indexForTimeout(86400) == kSleepTimeoutCount - 1, "index 24h");
-    check(timeoutForIndex(0) == 0, "timeout none");
-    check(timeoutForIndex(100000) == 86400, "timeout clamp");
-    checkFormat(0, "なし");
-    checkFormat(15, "15秒");
-    checkFormat(30, "30秒");
-    checkFormat(60, "1分");
-    checkFormat(120, "2分");
-    checkFormat(300, "5分");
-    checkFormat(600, "10分");
-    checkFormat(1800, "30分");
-    checkFormat(3600, "1時間");
-    checkFormat(7200, "2時間");
-    checkFormat(86400, "24時間");
-    check(sleepPageCount() == 3, "page count");
-    check(sleepPageForIndex(0) == 0, "page 0");
-    check(sleepPageForIndex(12) == 1, "page 1");
-    check(sleepPageForIndex(31) == 2, "page 2");
+    check(kSleepTimeoutMaxSec == 89940, "slider range max");
+    check(sleepTimeoutFromParts(0, 0) == 0, "always on");
+    check(sleepTimeoutFromParts(1, 0) == 60, "one minute");
+    check(sleepTimeoutFromParts(0, 1) == 3600, "one hour");
+    check(sleepTimeoutFromParts(59, 24) == 89940, "full range");
+    check(sleepTimeoutFromParts(99, 99) == 89940, "parts clamp");
+    check(sleepMinutesPart(7800) == 10, "minutes part");
+    check(sleepHoursPart(7800) == 2, "hours part");
+    check(sleepMinutesPart(89940) == 59 && sleepHoursPart(89940) == 24, "max parts");
+    check(isValidSleepTimeout(0), "always on valid");
+    check(isValidSleepTimeout(15) && isValidSleepTimeout(30), "legacy seconds kept");
+    check(isValidSleepTimeout(60) && isValidSleepTimeout(89940), "minute steps valid");
+    check(!isValidSleepTimeout(45) && !isValidSleepTimeout(89941), "off-step rejected");
+    check(isValidPollSlider(60) && isValidPollSlider(600), "poll ends valid");
+    check(!isValidPollSlider(59) && !isValidPollSlider(61) && !isValidPollSlider(601),
+          "poll off-step rejected");
+    check(sliderValueFromX(kSliderX0, 0, 59, 1) == 0, "track left end");
+    check(sliderValueFromX(kSliderX1, 0, 59, 1) == 59, "track right end");
+    check(sliderValueFromX(kSliderX0, 60, 600, 60) == 60, "poll left end");
+    check(sliderValueFromX(kSliderX1, 60, 600, 60) == 600, "poll right end");
+    check(sliderValueFromX(-100, 0, 59, 1) == 0, "track clamps left");
+    check(sliderValueFromX(999, 60, 600, 60) == 600, "track clamps right");
+    check(sliderXFromValue(0, 0, 59) == kSliderX0, "thumb left end");
+    check(sliderXFromValue(59, 0, 59) == kSliderX1, "thumb right end");
+    check(clampSleepScroll(-5) == 0, "scroll clamps low");
+    check(clampSleepScroll(9999) == kSleepScrollMax, "scroll clamps high");
+    check(sleepScrollFromTrackY(kSleepScrollBarY0) == 0, "scrollbar top");
+    check(sleepScrollFromTrackY(kSleepScrollBarY1) == kSleepScrollMax,
+          "scrollbar bottom");
     Page page = Page::Status;
     check(tabForTouch(0, 216, page) && page == Page::Status, "left tab");
     check(tabForTouch(319, 239, page) && page == Page::Sleep, "right tab");
     check(!tabForTouch(160, 215, page), "above tabs");
     check(!tabForTouch(-1, 220, page), "outside left");
-    size_t index = 0;
-    check(sleepCellForTouch(4, 66, 0, index) && index == 0, "first cell");
-    check(sleepCellForTouch(216 + 99, 66 + 3 * 30 + 23, 0, index) && index == 11,
-          "last cell page 0");
-    check(!sleepCellForTouch(4, 66 + 4 * 30, 0, index), "below grid");
-    check(sleepCellForTouch(4, 66, 2, index) && index == 24, "first cell page 2");
-    check(sleepCellForTouch(110, 66, 2, index) && index == 25, "second cell page 2");
-    check(!sleepCellForTouch(216 + 50, 66 + 2 * 30, 2, index), "empty cell page 2");
-    check(!sleepCellForTouch(4, 66, 9, index), "invalid page");
-    bool prev = false;
-    check(sleepNavForTouch(0, 188, prev) && prev, "prev button");
-    check(sleepNavForTouch(319, 207, prev) && !prev, "next button");
-    check(!sleepNavForTouch(160, 187, prev), "above nav");
     check(shouldSleep(15, 15000), "sleep at timeout");
     check(!shouldSleep(15, 14999), "awake before timeout");
     check(!shouldSleep(0, 86400000ULL), "none never sleeps");
