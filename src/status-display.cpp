@@ -343,6 +343,23 @@ bool readTouchHardware(povo::display::Point& out) {
   return true;
 }
 
+// ドラッグ追従用の生座標。平滑化フィルタを通さないため、押圧が閾値を
+// 下回った瞬間は追従を止める（凍結した古い座標で暴れないようにする）。
+bool readTouchDragPoint(povo::display::Point& out) {
+  if (!touch.tirqTouched()) return false;
+  const SensitiveTouchPoint point = touch.getPoint();
+  if (point.z < state.calibration.pressure) return false;
+  povo::display::Point mapped{
+      povo::touch::mapAxis(point.x, state.calibration.left, state.calibration.right,
+                           povo::touch::kTargetLeft, povo::touch::kTargetRight,
+                           povo::display::kScreenW - 1),
+      povo::touch::mapAxis(point.y, state.calibration.top, state.calibration.bottom,
+                           povo::touch::kTargetTop, povo::touch::kTargetBottom,
+                           povo::display::kScreenH - 1)};
+  out = povo::display::orientPoint(mapped, state.inverted);
+  return true;
+}
+
 bool captureCalibrationPoint(int16_t& rawX, int16_t& rawY, int16_t& pressure) {
   const uint32_t start = millis();
   while (static_cast<uint32_t>(millis() - start) < 15000) {
@@ -527,7 +544,11 @@ void pollDisplayInput(uint64_t nowMs) {
   }
   if (!tap && !contactStart) {
     // 接触継続中のドラッグ。Sleepタブでは同種別の操作だけを追従する。
+    // 平滑化済み座標ではなく生座標で追う（押圧低下時は止める）。
     if (state.awake && state.page == Page::Sleep && state.dragMode != 0) {
+      povo::display::Point drag;
+      if (!readTouchDragPoint(drag)) return;
+      point = drag;
       state.lastActivityMs = nowMs;
       if (point.x < 16 || point.x > 283) return;
       if (state.dragMode == 1) {
