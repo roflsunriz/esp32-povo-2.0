@@ -40,7 +40,7 @@ Get-Content -Raw -LiteralPath .\COMMON-AGENTS.md
 - 実運用はモバイルルーター等の2.4 GHz帯へ直接接続する。`include/device-config.h`（Git管理外）は2026-09-06には一時PCホットスポットとして記録したが、2026-09-14にユーザーが現行SSIDをCOM4用の実運用APと確認した。パスワードを表示せずに設定済みとローカルビルドへの同梱を確認した。秘密のWi-Fi値や設定入りファームウェアをコミット・公開しない。
 
 ## 画面タブ・自動消灯・反転の実装記録（2026-09-07・実機未検証）
-- タッチはXPT2046をTFTと別バスのVSPI（CLK 25・MISO 39・MOSI 32・CS 33・IRQ 36）で読み、`lib/sensitive-xpt2046` と近接3回の判定はcodex-notifications式を使う。TFTとタッチのピンが別系統のためTFT_eSPI内蔵タッチは使わない。旧読み取りは最後にPD0=1を残してPENIRQを無効化していたため、ドライバー末尾のPD0=0変換を維持する。消灯中の接触は離すまで復帰専用とする。2026-09-14時点でこの修正と校正はビルド・ホストテスト済み、実機未検証。
+- タッチはXPT2046をTFTと別バスのVSPI（CLK 25・MISO 39・MOSI 32・CS 33・IRQ 36）で読み、`lib/sensitive-xpt2046` と近接3回の判定はcodex-notifications式を使う。TFTとタッチのピンが別系統のためTFT_eSPI内蔵タッチは使わない。旧読み取りは最後にPD0=1を残してPENIRQを無効化していたため、ドライバー末尾のPD0=0変換を維持する。消灯中の接触は離すまで復帰専用とする。2026-09-14時点でこの修正と校正はビルド・ホストテスト済み、実機未検証。2026-09-25、近接3回だけの短い接触でも消灯タイマー更新・復帰に使われ設定時間に消灯しない原因になるため、30ms以上続いた確定押下（`include/display-settings.h` の `PressConfirm`、BOOT除去と同等）だけを操作として扱う。確定開始はタップ間隔抑止にかかわらずタイマーを更新し、消灯中の復帰は確定開始時点で専用処理する（`src/status-display.cpp`、`test/display-settings-test.cpp`）。実機のノイズ耐性は未検証。
 - 起動後BOOT長押しで2点の位置・押圧感度を調整する。NVS `povo-display` の `touch_calib` 単一blobへバージョン・検証値付きで保存し、旧版は既定値へ安全にフォールバックする。押下取得・保存に失敗した場合は旧値を維持する。ペン自体が抵抗膜へ接触できずPENIRQが出ない場合はソフトウェア閾値では解決できない（`src/status-display.cpp`、`include/touch-calibration.h`、`verification.md`）。
 - BOOTボタンはGPIO0（INPUT_PULLUP）。30msチャタリング除去・50ms以上押して離したら1回押しで上下反転（rotation 1⇔3、タッチ座標も反転）。
 - 消灯設定は `include/display-settings.h` に純粋ロジックとして集約し `test/display-settings-test.cpp` で検証する。0〜59分・0〜24時間・取得間隔60〜600秒（60秒刻み）のスライダーとスクロールバーを備え、内容ドラッグのスクロールとドラッグ操作に対応する。表示文言の正本は `include/ui-text.h`、字形は `scripts/generate-font.py` で再生成する。

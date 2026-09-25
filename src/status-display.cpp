@@ -49,6 +49,9 @@ struct State {
   bool awake = true;
   bool dirty = false;
   bool wasTouched = false;
+  // 確定接触の前回値。短いノイズを除いたエッジ検出に使う。
+  bool wasActive = false;
+  povo::display::PressConfirm press;
   bool bootReady = false;
   uint64_t lastActivityMs = 0;
   uint64_t lastTapMs = 0;
@@ -140,6 +143,9 @@ void loadSettings() {
   state.dragMode = 0;
   state.inverted = false;
   state.calibration = {};
+  state.press = {};
+  state.wasTouched = false;
+  state.wasActive = false;
 #ifdef ARDUINO
   Preferences prefs;
   if (!prefs.begin(kSettingsStore, true)) return;
@@ -436,7 +442,9 @@ void calibrateTouch() {
   applyRotation();
   touch.setPressureThreshold(state.calibration.pressure);
   state.touchFilter.reset();
+  state.press = {};
   state.wasTouched = false;
+  state.wasActive = false;
   state.lastActivityMs = static_cast<uint64_t>(esp_timer_get_time()) / 1000ULL;
   redrawFromCache();
 }
@@ -510,16 +518,29 @@ void pollDisplayInput(uint64_t nowMs) {
   }
   povo::display::Point point;
   const bool touched = readTouchHardware(point);
-  const bool contactStart = touched && !state.wasTouched;
-  const bool tap = touched && !state.wasTouched &&
+  // 30ms以上続いた接触だけを確定として扱う。短いノイズでは自動消灯
+  // タイマーを更新せず、消灯からの復帰もタブやスライダー操作もしない。
+  const bool active =
+      povo::display::pressConfirmUpdate(state.press, touched, nowMs);
+  const bool contactStart = active && !state.wasActive;
+  const bool tap = active && !state.wasActive &&
                    (nowMs - state.lastTapMs >= kTapMinIntervalMs || state.lastTapMs == 0);
   state.wasTouched = touched;
-  if (!touched) {
+  state.wasActive = active;
+  if (!active) {
     state.dragMode = 0;
-    if (!tap) return;
+    return;
   }
-  if (!tap && !touched) return;
   if (contactStart) {
+    // 確定した接触の開始は、タップ間隔の抑止にかかわらず操作として数え、
+    // 自動消灯タイマーを更新する。消灯中の接触は離すまで復帰専用とする。
+    state.lastActivityMs = nowMs;
+    if (!state.awake) {
+      setAwakeLocked(true);
+      state.dragMode = 0;
+      redrawFromCache();
+      return;
+    }
     // 接触開始点で操作種別を固定する。タブ上は切替専用で変化させない。
     // タップ間隔でタップ自体が抑止されてもドラッグは追従する。
     state.dragMode = 0;
@@ -586,12 +607,8 @@ void pollDisplayInput(uint64_t nowMs) {
   if (!tap) return;
   state.lastTapMs = nowMs;
   state.lastActivityMs = nowMs;
-  if (!state.awake) {
-    setAwakeLocked(true);
-    state.wasTouched = true; // 復帰に使った接触は離すまで操作へ流さない。
-    state.dragMode = 0;
-    redrawFromCache(); return;
-  }
+  // 消灯中の復帰は確定接触の開始時点で済ませているため、
+  // ここでは点灯中のタブとスライダー操作だけを扱う。
   Page tab;
   if (povo::display::tabForTouch(point.x, point.y, tab)) {
     if (tab != state.page) {

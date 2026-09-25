@@ -79,6 +79,11 @@ constexpr uint8_t kRotationInverted = 3;
 constexpr uint32_t kBootDebounceMs = 30;
 constexpr uint32_t kBootPressMinMs = 50;
 constexpr uint32_t kBootCalibrationHoldMs = 1500;
+// タッチ確定の最小接触時間。近接3サンプル（最短で約15ms相当）だけの
+// 短いノイズを自動消灯タイマーのリセットや消灯復帰へ使わないため、
+// BOOTのチャタリング除去と同等の30msを要求する。人間のタップは通常
+// これより長いため体感の遅れは1フレーム程度に収まる。
+constexpr uint32_t kTouchConfirmMs = 30;
 enum class BootAction : uint8_t { None, Rotate, Calibrate };
 
 struct Point {
@@ -169,6 +174,33 @@ inline BootAction bootUpdate(BootFilter& filter, bool rawHigh, uint64_t nowMs) {
   filter.armed = true;
   if (!pressed) return BootAction::None;
   return duration >= kBootCalibrationHoldMs ? BootAction::Calibrate : BootAction::Rotate;
+}
+
+// 接触の確定状態。短いノイズを弾き、30ms以上続いた接触だけを
+// 自動消灯タイマーの更新・消灯復帰・タブやスライダー操作へ使う。
+struct PressConfirm {
+  bool inContact = false;
+  uint64_t startMs = 0;
+  bool confirmed = false;
+};
+
+// フィルタ済みの接触有無から確定接触を求める。確定したループでtrue。
+// 離したらリセットし、次の接触は改めて30msを要求する。
+inline bool pressConfirmUpdate(PressConfirm& state, bool contact, uint64_t nowMs) {
+  if (!contact) {
+    state.inContact = false;
+    state.confirmed = false;
+    state.startMs = 0;
+    return false;
+  }
+  if (!state.inContact || nowMs < state.startMs) {
+    state.inContact = true;
+    state.startMs = nowMs;
+    state.confirmed = false;
+  }
+  if (!state.confirmed && nowMs - state.startMs >= kTouchConfirmMs)
+    state.confirmed = true;
+  return state.confirmed;
 }
 
 }  // namespace display
