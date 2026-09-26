@@ -25,7 +25,7 @@ platformio==6.2.0
 py-serializable==2.1.0
 pyelftools==0.33
 pygments==2.21.0
-pyparsing==3.3.2
+pyparsing==3.3.3
 pyserial==3.5
 requests==2.34.2
 rich==15.0.0
