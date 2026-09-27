@@ -11,13 +11,18 @@ const source=await readFile('include/setup-page.h','utf8');
 const html=source.match(/R"HTML\(([\s\S]*)\)HTML"/)[1].replace('{{TOKEN}}','test-token').replace('{{INITIAL_MESSAGE}}','');
 const page=resolve(root,'portal-test.html');await writeFile(page,html);
 const executable=process.env.CHROME_PATH||(process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':'google-chrome');
-const chrome=spawn(executable,['--headless=new','--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{stdio:'ignore',windowsHide:true});
+const chrome=spawn(executable,['--headless=new','--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{stdio:['ignore','ignore','pipe'],windowsHide:true});
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
-let socket;
+let socket,chromeError,chromeExit,chromeStderr='';
+chrome.once('error',error=>{chromeError=error;});
+chrome.once('exit',(code,signal)=>{chromeExit={code,signal};});
+chrome.stderr.on('data',chunk=>{chromeStderr=(chromeStderr+chunk.toString()).slice(-4000);});
 try {
   let port;
-  for(let i=0;i<100;i++){try{port=(await readFile(resolve(profile,'DevToolsActivePort'),'utf8')).split('\n')[0];break;}catch{await pause(100);}}
-  assert(port,'Chrome did not start');
+  const startupDeadline=Date.now()+30000;
+  while(Date.now()<startupDeadline){try{port=(await readFile(resolve(profile,'DevToolsActivePort'),'utf8')).split('\n')[0];break;}catch{}if(chromeError||chromeExit)break;await pause(100);}
+  const startupDetails=chromeError?`spawn error: ${chromeError.message}`:chromeExit?`exit code ${chromeExit.code}, signal ${chromeExit.signal}`:`timed out after 30000ms`;
+  assert(port,`Chrome did not start (${startupDetails})${chromeStderr?`\n${chromeStderr}`:''}`);
   const tabs=await(await fetch(`http://127.0.0.1:${port}/json/list`)).json();
   socket=new WebSocket(tabs.find(t=>t.type==='page').webSocketDebuggerUrl);
   await new Promise((r,j)=>{socket.onopen=r;socket.onerror=j;});
@@ -56,5 +61,5 @@ try {
 } finally {
   socket?.close();
   chrome.kill();
-  if(process.platform==='win32')spawnSync('taskkill',['/PID',String(chrome.pid),'/T','/F'],{stdio:'ignore',windowsHide:true});
+  if(process.platform==='win32'&&chrome.pid)spawnSync('taskkill',['/PID',String(chrome.pid),'/T','/F'],{stdio:'ignore',windowsHide:true});
 }
