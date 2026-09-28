@@ -1,0 +1,28 @@
+name: Dependabot automation
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        required: true
+        type: string
+      head_sha:
+        required: true
+        type: string
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  workflow_run:
+    workflows: [Checks]
+    types: [completed]
+
+jobs:
+  dependabot:
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+      statuses: write
+    uses: roflsunriz/myAGENTS/.github/workflows/dependabot-automation.yml@8bcb79de73249f04e83d0a6071d30ac025710a17
+    with:
+      ci_workflows: '["Checks"]'
+      callback_workflow_file: dependabot-automation.yml
