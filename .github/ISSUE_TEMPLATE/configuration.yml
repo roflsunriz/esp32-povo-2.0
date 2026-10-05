@@ -1,29 +1,40 @@
-title: '[質問] '
+name: 設定の相談
+description: 設定の相談の内容と再現条件
+title: '[Config] '
+labels:
+  - question
 body:
   - type: markdown
     attributes:
       value: |-
         esp32-povo-2.0に関する内容を、目的と確認できた事実に分けて記載してください。
         Cookie、認証トークン、パスワード、個人情報を本文や添付に含めないでください。認証コード、Wi-Fi認証情報、NVS・全フラッシュのダンプ、個人設定入りファームウェアも添付しないでください。
+        投稿前に[README](https://github.com/roflsunriz/esp32-povo-2.0/blob/main/README.md)と[既存Issue](https://github.com/roflsunriz/esp32-povo-2.0/issues)を確認してください。
+        脆弱性の報告は[SECURITY.md](https://github.com/roflsunriz/esp32-povo-2.0/blob/main/SECURITY.md)の案内に従ってください。
   - type: textarea
-    id: details
+    id: legacy-1
     attributes:
-      label: 質問
-      description: 秘密情報を含めず、背景と相談内容を記載してください。
+      label: 達成したい目的と相談内容
     validations:
-      required: true
+      required: false
   - type: textarea
-    id: environment-common
+    id: legacy-2
     attributes:
-      label: 対象と環境
-      description: 使用中の版、OS、関連ツール、機器や接続方法を秘密情報を除いて記載してください。
+      label: 試した手順と期待した結果
+    validations:
+      required: false
+  - type: textarea
+    id: legacy-3
+    attributes:
+      label: 環境・検証結果
+      description: 秘密情報や個人設定入りファームウェアを添付しないでください。
     validations:
       required: false
   - type: textarea
     id: attempted-common
     attributes:
-      label: 試したことと結果
-      description: 試した手順、期待した結果、実際の結果を記載してください。
+      label: 実際の結果
+      description: 試した設定や手順の結果を記載してください。
     validations:
       required: false
   - type: textarea

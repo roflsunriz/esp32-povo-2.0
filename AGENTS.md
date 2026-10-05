@@ -61,3 +61,7 @@ Get-Content -Raw -LiteralPath .\COMMON-AGENTS.md
 - 同APKのOkHttpピニングは残っていた。再採取時の一時JVMTI計測、NDKビルド、解除手順は `docs/auth-capture/README.md`。2026-09-05は所有者によるCA登録後に採取し、終了後にCAと計測を撤去済み。
 - 独立認証はv3 login/action→v4 otp→v5/public users/auth、更新はGET users/token。`next_step=dashboard` が成功。メールコードは実際には2分有効で、`otp_duration=15` を15分と解釈しない。
 - 期限の正本は現行Quilt `/api/v1/quilt/page/user-plan-details-v2`。旧account/plan/details/getは今回500だった。日本語・Asia/Tokyoを指定し、適用中/使い放題のexpiry.valueを分精度で読む。構造・選別の変更時は `direct-status.h` とキャプチャ資料を合わせて更新する。
+
+## GitHub受付フォームの注意
+
+- `.github/ISSUE_TEMPLATE/config.yml` は受付選択画面の設定専用であり、Issueフォーム本文を置かない。設定相談フォームは `configuration.yml` に置く。フォームの見出しを変更するときは `.github/workflows/` の本文解析を確認し、`OS`・`対象領域` など解析キーとして使う見出しを保全する。
