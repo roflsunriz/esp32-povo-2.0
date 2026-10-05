@@ -1,9 +1,28 @@
-title: ""
+title: '[雑談] '
 body:
+  - type: markdown
+    attributes:
+      value: |-
+        esp32-povo-2.0に関する内容を、目的と確認できた事実に分けて記載してください。
+        Cookie、認証トークン、パスワード、個人情報を本文や添付に含めないでください。認証コード、Wi-Fi認証情報、NVS・全フラッシュのダンプ、個人設定入りファームウェアも添付しないでください。
   - type: textarea
     id: details
     attributes:
-      label: 一般
+      label: 話題と背景
       description: 秘密情報を含めず、背景と相談内容を記載してください。
     validations:
       required: true
+  - type: textarea
+    id: additional-common
+    attributes:
+      label: 補足
+      description: 話題の背景、参考資料、期待する議論の結果を記載してください。
+    validations:
+      required: false
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 公開情報の確認
+      options:
+        - label: 本文と添付に秘密情報や個人情報が含まれていないことを確認しました。
+          required: true
