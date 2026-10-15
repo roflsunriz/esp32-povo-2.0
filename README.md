@@ -38,3 +38,7 @@ v0.3.0ではCYDの直接認証・期限表示・再起動保持・Wi-Fi自動復
 [更新手順](how-to-update.md)、[検証手順](verification.md)、[認証キャプチャと静的解析](docs/auth-capture/README.md)を参照してください。[原案](original-idea.md)は旧方式を考案した時点の記録です。
 
 Wi-Fi設定・認証トークンを含むファイルやフラッシュ内容を公開しないでください。保存方式と復旧は[セキュリティ](SECURITY.md)に記載しています。独自コードはMITです。
+
+## 開発資料
+
+開発上の知見・実現手段と例外は [findings.md](findings.md)、変更時の確認は [verification.md](verification.md) を参照してください。
