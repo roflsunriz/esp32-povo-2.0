@@ -288,8 +288,9 @@ void drawSleepPage() {
     for (int offset = -2; offset <= 2; ++offset) {
       const int candidate = static_cast<int>(value) + offset;
       if (candidate < 0 || candidate > static_cast<int>(maximum)) continue;
-      char shown[4] = {};
-      snprintf(shown, sizeof(shown), "%02d", candidate);
+      const char shown[3] = {
+          static_cast<char>('0' + candidate / 10),
+          static_cast<char>('0' + candidate % 10), '\0'};
       lineAt(x0 + ((x1 - x0) - 16) / 2,
              kWheelCenterY + offset * kWheelRowH - 8, shown,
              offset == 0 ? fg : 0x8410);
