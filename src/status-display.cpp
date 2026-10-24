@@ -2,6 +2,8 @@
 #include <TFT_eSPI.h>
 #include <time.h>
 #include "status-display.h"
+
+#include <cstring>
 #include "display-settings.h"
 #include "display-diff.h"
 #include "touch-calibration.h"
