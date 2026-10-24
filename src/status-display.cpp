@@ -45,6 +45,7 @@ struct State {
   int dragMode = 0;  // 0 none, 1 minutes, 2 hours, 3 poll
   int dragStartX = 0;
   int dragStartY = 0;
+  uint32_t dragStartValue = 0;
   bool inverted = false;
   bool awake = true;
   bool dirty = false;
@@ -276,30 +277,35 @@ void drawSleepPage() {
     drawing->fillRect(thumbX - 6, y - 6, 12, 13, fg);
     drawing->fillRect(thumbX - 4, y - 4, 8, 9, panel);
   };
-  char combined[48] = {};
+  auto drawWheel = [&](int x0, int x1, uint32_t value, uint32_t maximum,
+                       const char* label) {
+    const int labelWidth = static_cast<int>(strlen(label)) * 8;
+    lineAt(x0 + ((x1 - x0) - labelWidth) / 2, 28, label, fg);
+    drawing->fillRect(x0, kWheelCenterY - kWheelRowH / 2, x1 - x0,
+                      kWheelRowH, barBg);
+    for (int offset = -2; offset <= 2; ++offset) {
+      const int candidate = static_cast<int>(value) + offset;
+      if (candidate < 0 || candidate > static_cast<int>(maximum)) continue;
+      char shown[4] = {};
+      snprintf(shown, sizeof(shown), "%02d", candidate);
+      lineAt(x0 + ((x1 - x0) - 16) / 2,
+             kWheelCenterY + offset * kWheelRowH - 8, shown,
+             offset == 0 ? fg : 0x8410);
+    }
+  };
   const uint32_t minutes = sleepMinutesPart(state.sleepSec);
   const uint32_t hours = sleepHoursPart(state.sleepSec);
-  if (state.sleepSec == 0)
-    snprintf(combined, sizeof(combined), "%s", povo::text::sleepAlwaysOn);
-  else
-    snprintf(combined, sizeof(combined), povo::text::sleepCombined,
-             static_cast<unsigned>(hours), static_cast<unsigned>(minutes));
-  line(30, povo::text::sleepTitle, accent);
-  drawRow(56, combined, fg);
+  drawWheel(kHoursWheelX0, kHoursWheelX1, hours, kSleepHoursMax, "HOUR");
+  drawWheel(kMinutesWheelX0, kMinutesWheelX1, minutes, kSleepMinutesMax,
+            "MIN");
   char label[48];
-  snprintf(label, sizeof(label), povo::text::sleepMinutesLabel,
-           static_cast<unsigned>(minutes));
-  drawRow(76, label, fg);
-  drawTrack(kSliderMinutesY, minutes, 0, kSleepMinutesMax);
-  snprintf(label, sizeof(label), povo::text::sleepHoursLabel,
-           static_cast<unsigned>(hours));
-  drawRow(124, label, fg);
-  drawTrack(kSliderHoursY, hours, 0, kSleepHoursMax);
   snprintf(label, sizeof(label), povo::text::sleepPollLabel,
            static_cast<unsigned>(state.pollSec));
-  drawRow(172, label, fg);
+  drawRow(154, label, fg);
   drawTrack(kSliderPollY, state.pollSec, kPollSliderMinSec, kPollSliderMaxSec);
-  drawRow(218, povo::text::sleepAlwaysNote, fg);
+  drawing->fillRect(kSliderX0, kScreenOffY, kSliderX1 - kSliderX0,
+                    kScreenOffH, accent);
+  lineAt(108, kScreenOffY + 6, "SCREEN OFF", bg);
 }
 void redrawFromCache() {
   if (!state.awake) return;
@@ -546,18 +552,24 @@ void pollDisplayInput(uint64_t nowMs) {
     state.dragMode = 0;
     state.dragStartX = point.x;
     state.dragStartY = point.y;
+    state.dragStartValue = 0;
     Page startTab;
     if (!povo::display::tabForTouch(point.x, point.y, startTab) &&
         state.awake && state.page == Page::Sleep) {
       const int startContentY = point.y;
-      if (point.x >= 16 && point.x <= 283) {
-        if (startContentY >= povo::display::kSliderMinutesY - povo::display::kSliderHalfH &&
-            startContentY < povo::display::kSliderMinutesY + povo::display::kSliderHalfH)
+      if (startContentY >= povo::display::kWheelTopY &&
+          startContentY < povo::display::kWheelBottomY) {
+        if (point.x >= povo::display::kMinutesWheelX0 &&
+            point.x < povo::display::kMinutesWheelX1) {
           state.dragMode = 1;
-        else if (startContentY >= povo::display::kSliderHoursY - povo::display::kSliderHalfH &&
-                 startContentY < povo::display::kSliderHoursY + povo::display::kSliderHalfH)
+          state.dragStartValue = povo::display::sleepMinutesPart(state.sleepSec);
+        } else if (point.x >= povo::display::kHoursWheelX0 &&
+                   point.x < povo::display::kHoursWheelX1) {
           state.dragMode = 2;
-        else if (startContentY >= povo::display::kSliderPollY - povo::display::kSliderHalfH &&
+          state.dragStartValue = povo::display::sleepHoursPart(state.sleepSec);
+        }
+      } else if (point.x >= 16 && point.x <= 283) {
+        if (startContentY >= povo::display::kSliderPollY - povo::display::kSliderHalfH &&
                  startContentY < povo::display::kSliderPollY + povo::display::kSliderHalfH)
           state.dragMode = 3;
       }
@@ -571,10 +583,10 @@ void pollDisplayInput(uint64_t nowMs) {
       if (!readTouchDragPoint(drag)) return;
       point = drag;
       state.lastActivityMs = nowMs;
-      if (point.x < 16 || point.x > 283) return;
       if (state.dragMode == 1) {
-        const uint32_t minutes = povo::display::sliderValueFromX(
-            point.x, 0, povo::display::kSleepMinutesMax, 1);
+        const uint32_t minutes = povo::display::wheelValueForDrag(
+            state.dragStartValue, state.dragStartY, point.y,
+            povo::display::kSleepMinutesMax);
         if (minutes != povo::display::sleepMinutesPart(state.sleepSec)) {
           state.sleepSec = povo::display::sleepTimeoutFromParts(
               minutes, povo::display::sleepHoursPart(state.sleepSec));
@@ -582,8 +594,9 @@ void pollDisplayInput(uint64_t nowMs) {
           redrawFromCache();
         }
       } else if (state.dragMode == 2) {
-        const uint32_t hours = povo::display::sliderValueFromX(
-            point.x, 0, povo::display::kSleepHoursMax, 1);
+        const uint32_t hours = povo::display::wheelValueForDrag(
+            state.dragStartValue, state.dragStartY, point.y,
+            povo::display::kSleepHoursMax);
         if (hours != povo::display::sleepHoursPart(state.sleepSec)) {
           state.sleepSec = povo::display::sleepTimeoutFromParts(
               povo::display::sleepMinutesPart(state.sleepSec), hours);
@@ -591,6 +604,7 @@ void pollDisplayInput(uint64_t nowMs) {
           redrawFromCache();
         }
       } else if (state.dragMode == 3) {
+        if (point.x < 16 || point.x > 283) return;
         const uint32_t poll = povo::display::sliderValueFromX(
             point.x, povo::display::kPollSliderMinSec,
             povo::display::kPollSliderMaxSec,
@@ -624,20 +638,32 @@ void pollDisplayInput(uint64_t nowMs) {
   uint32_t minutes = povo::display::sleepMinutesPart(state.sleepSec);
   uint32_t hours = povo::display::sleepHoursPart(state.sleepSec);
   bool timeoutTouched = false;
-  if (point.x >= 16 && point.x <= 283) {
-    if (contentY >= povo::display::kSliderMinutesY - povo::display::kSliderHalfH &&
-        contentY < povo::display::kSliderMinutesY + povo::display::kSliderHalfH) {
-      minutes = povo::display::sliderValueFromX(point.x, 0,
-                                                povo::display::kSleepMinutesMax, 1);
+  if (point.x >= povo::display::kSliderX0 &&
+      point.x < povo::display::kSliderX1 &&
+      contentY >= povo::display::kScreenOffY &&
+      contentY < povo::display::kScreenOffY + povo::display::kScreenOffH) {
+    setAwakeLocked(false);
+    return;
+  }
+  if (contentY >= povo::display::kWheelTopY &&
+      contentY < povo::display::kWheelBottomY) {
+    if (point.x >= povo::display::kMinutesWheelX0 &&
+        point.x < povo::display::kMinutesWheelX1) {
+      minutes = povo::display::wheelValueForTap(
+          minutes, contentY, povo::display::kSleepMinutesMax);
       state.dragMode = 1;
+      state.dragStartValue = minutes;
       timeoutTouched = true;
-    } else if (contentY >= povo::display::kSliderHoursY - povo::display::kSliderHalfH &&
-               contentY < povo::display::kSliderHoursY + povo::display::kSliderHalfH) {
-      hours = povo::display::sliderValueFromX(point.x, 0,
-                                              povo::display::kSleepHoursMax, 1);
+    } else if (point.x >= povo::display::kHoursWheelX0 &&
+               point.x < povo::display::kHoursWheelX1) {
+      hours = povo::display::wheelValueForTap(
+          hours, contentY, povo::display::kSleepHoursMax);
       state.dragMode = 2;
+      state.dragStartValue = hours;
       timeoutTouched = true;
-    } else if (contentY >= povo::display::kSliderPollY - povo::display::kSliderHalfH &&
+    }
+  } else if (point.x >= 16 && point.x <= 283) {
+    if (contentY >= povo::display::kSliderPollY - povo::display::kSliderHalfH &&
                contentY < povo::display::kSliderPollY + povo::display::kSliderHalfH) {
       const uint32_t poll = povo::display::sliderValueFromX(
           point.x, povo::display::kPollSliderMinSec,

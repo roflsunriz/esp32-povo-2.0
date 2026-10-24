@@ -64,14 +64,22 @@ inline int barFillWidth(int totalWidth, uint64_t permille) {
   return static_cast<int>(static_cast<uint64_t>(totalWidth) * permille / 1000);
 }
 
-// 設定タブのスライダー配置。タッチ面は x 24..295・y 24..215 のため、
-// 操作子はその範囲へ収める。内容は表示域に収まるためスクロールは不要。
+// 設定タブのAppleアラーム風ドラムと取得間隔スライダー。タッチ面は
+// x 24..295・y 24..215 のため、主要操作子をその範囲へ収める。
 constexpr int kSliderX0 = 24;
 constexpr int kSliderX1 = 275;
-constexpr int kSliderMinutesY = 102;
-constexpr int kSliderHoursY = 150;
-constexpr int kSliderPollY = 198;
+constexpr int kWheelRowH = 22;
+constexpr int kWheelCenterY = 98;
+constexpr int kWheelTopY = kWheelCenterY - kWheelRowH * 2 - 11;
+constexpr int kWheelBottomY = kWheelCenterY + kWheelRowH * 2 + 11;
+constexpr int kHoursWheelX0 = 24;
+constexpr int kHoursWheelX1 = 146;
+constexpr int kMinutesWheelX0 = 154;
+constexpr int kMinutesWheelX1 = 275;
+constexpr int kSliderPollY = 178;
 constexpr int kSliderHalfH = 14;
+constexpr int kScreenOffY = 198;
+constexpr int kScreenOffH = 28;
 
 constexpr uint8_t kRotationNormal = 1;
 constexpr uint8_t kRotationInverted = 3;
@@ -124,6 +132,31 @@ inline uint32_t sliderValueFromX(int x, uint32_t minV, uint32_t maxV,
   uint32_t index = (offset * steps + trackW / 2) / trackW;
   if (index > steps) index = steps;
   return minV + index * step;
+}
+
+inline int wheelSteps(int pixels) {
+  return pixels >= 0 ? (pixels + kWheelRowH / 2) / kWheelRowH
+                     : -((-pixels + kWheelRowH / 2) / kWheelRowH);
+}
+
+inline uint32_t clampWheelValue(int value, uint32_t maximum) {
+  if (value < 0) return 0;
+  if (static_cast<uint32_t>(value) > maximum) return maximum;
+  return static_cast<uint32_t>(value);
+}
+
+inline uint32_t wheelValueForTap(uint32_t current, int touchY,
+                                 uint32_t maximum) {
+  return clampWheelValue(static_cast<int>(current) +
+                             wheelSteps(touchY - kWheelCenterY),
+                         maximum);
+}
+
+inline uint32_t wheelValueForDrag(uint32_t start, int startY, int currentY,
+                                  uint32_t maximum) {
+  return clampWheelValue(static_cast<int>(start) +
+                             wheelSteps(startY - currentY),
+                         maximum);
 }
 
 inline bool tabForTouch(int x, int y, Page& out) {

@@ -63,10 +63,12 @@ int main(int argc, char** argv) {
       throw std::runtime_error("slider timeout rejected");
     setDisplayPage(povo::display::Page::Sleep);
     drawDisplay(&s, 120000, nullptr, 0, false);
-    if (ui::missing) throw std::runtime_error("unknown glyph in slider settings");
-    // 分スライダーのつまみ（10分相当）が白く描かれている。
-    if (ui::pixels[102 * 320 + 62] != fg)
-      throw std::runtime_error("minutes slider thumb missing");
+    if (ui::missing) throw std::runtime_error("unknown glyph in drum settings");
+    // 分ドラムの中央選択帯と即時消灯ボタンが描かれている。
+    if (ui::pixels[94 * 320 + 155] != barBg)
+      throw std::runtime_error("minutes drum selection missing");
+    if (ui::pixels[210 * 320 + 40] != accent)
+      throw std::runtime_error("screen-off button missing");
     setDisplayPage(povo::display::Page::Status);
     drawDisplay(&s, 120000, nullptr, 0, false);
     if (ui::pixels[98 * 320 + 8] != fg)

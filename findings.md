@@ -10,3 +10,4 @@
 - 残り時間barの分母は有効期間 `spanMs`。同expiryでは維持し、初回/更新時は `expiry-now`。残り30分以下と期限切れは1分poll、未知期限は通常間隔、renewalで通常へ戻す。
 - 認証captureではADB targetを必ず `-s` で固定し、token/Cookie/mail/OTPを保存前に除去する。proxy終了時は `http_proxy :0` と内部host/portを両方消し、CA/JVMTI計測も撤去する。
 - 直接認証はlogin/action→otp→public users/auth、更新はGET users/token。`otp_duration=15` を15分と解釈せず、実測の2分期限に従う。期限の正本はQuilt `user-plan-details-v2` の適用中使い放題expiry。
+- 自動消灯の時・分は画面内の2列縦ドラムで選び、取得間隔だけ横スライダーを維持する。即時消灯はNVSの時間設定を変更せず、30ms確定接触の同じ押下を復帰へ流さない。

@@ -38,6 +38,16 @@ int main() {
     check(sliderValueFromX(999, 60, 600, 60) == 600, "track clamps right");
     check(sliderXFromValue(0, 0, 59) == kSliderX0, "thumb left end");
     check(sliderXFromValue(59, 0, 59) == kSliderX1, "thumb right end");
+    check(wheelValueForTap(10, kWheelCenterY + kWheelRowH * 2,
+                           kSleepMinutesMax) == 12,
+          "drum lower row increments");
+    check(wheelValueForTap(10, kWheelCenterY - kWheelRowH * 2,
+                           kSleepMinutesMax) == 8,
+          "drum upper row decrements");
+    check(wheelValueForDrag(10, 120, 76, kSleepMinutesMax) == 12,
+          "upward drum drag increments");
+    check(wheelValueForDrag(1, 100, 200, kSleepMinutesMax) == 0,
+          "drum clamps at zero");
     Page page = Page::Status;
     check(tabForTouch(0, 10, page) && page == Page::Status, "left tab");
     check(tabForTouch(319, 10, page) && page == Page::Sleep, "right tab");
@@ -148,7 +158,7 @@ int main() {
           if (runs == 1) check(top == 64 && height == 16, "separate distant band");
           ++runs; return true;
         }) && runs == 2, "changed runs transferred once");
-    std::cout << "display settings timeouts, tabs, power, rotation and boot passed\n";
+    std::cout << "display drums, timeouts, tabs, power, rotation and boot passed\n";
     return 0;
   } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }
